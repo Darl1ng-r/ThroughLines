@@ -1,0 +1,15 @@
+graph LR
+    subgraph Frontend [Global CDN]
+        Vercel[Vercel / Netlify] -->|Serves Static Files| UserBrowser[User's Browser]
+    end
+
+    subgraph Backend [Supabase Cloud]
+        UserBrowser -->|Reads/Writes via Client SDK| DB[(PostgreSQL Database)]
+        UserBrowser -->|Handles Signin/Signup| Auth[GoTrue Auth Service]
+        UserBrowser -->|Invokes Edge Functions| Edge[Deno Serverless Functions]
+    end
+
+    subgraph External [Third-Party Services]
+        Edge -->|Moderates Content| ModAPI[Perspective API / OpenAI]
+        Auth -->|Sends Signup Emails| Email[Resend / SendGrid]
+    end
