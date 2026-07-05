@@ -22,7 +22,7 @@ const tokens = {
 
 export default function Landing() {
   const navigate = useNavigate()
-  const { signIn, signUp } = useAuth()
+  const { signIn, signUp, signInWithGoogle } = useAuth()
 
   const [mode, setMode] = useState("login") // 'login' or 'signup'
   const [displayName, setDisplayName] = useState("")
@@ -63,8 +63,17 @@ export default function Landing() {
     }
   }
 
-  function handleGoogleLogin() {
-    setErrorMsg("Google authentication is available on the hosted platform. Please sign up with an email and password to test locally.")
+  async function handleGoogleLogin() {
+    try {
+      setErrorMsg("")
+      setLoading(true)
+      await signInWithGoogle()
+    } catch (err) {
+      console.error(err)
+      setErrorMsg(err.message || "Google authentication failed. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

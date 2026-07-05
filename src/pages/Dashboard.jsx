@@ -81,6 +81,7 @@ export default function Dashboard() {
   const [entries, setEntries] = useState([])
   const [loadingTopics, setLoadingTopics] = useState(true)
   const [loadingEntries, setLoadingEntries] = useState(false)
+  const [nudges, setNudges] = useState([])
   
   // Compose states
   const [showNewTopic, setShowNewTopic] = useState(false)
@@ -92,6 +93,7 @@ export default function Dashboard() {
   const [toastMsg, setToastMsg] = useState("")
 
   const selectedTopic = topics.find(t => t.id === selectedId) || null
+  const selectedTopicNudges = nudges.filter(n => n.topic_id === selectedId)
 
   useEffect(() => {
     if (user) {
@@ -137,6 +139,15 @@ export default function Dashboard() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
+
+      const { data: nudgesData, error: nudgesErr } = await supabase
+        .from('nudges')
+        .select('id, topic_id')
+
+      if (!nudgesErr) {
+        setNudges(nudgesData || [])
+      }
+
       setTopics(data || [])
       if (data && data.length > 0 && !selectedId) {
         setSelectedId(data[0].id)
@@ -145,6 +156,21 @@ export default function Dashboard() {
       console.error('Error fetching topics:', err)
     } finally {
       setLoadingTopics(false)
+    }
+  }
+
+  async function clearNudges(topicId) {
+    try {
+      const { error } = await supabase
+        .from('nudges')
+        .delete()
+        .eq('topic_id', topicId)
+      if (error) throw error
+      setNudges(prev => prev.filter(n => n.topic_id !== topicId))
+      triggerToast("Nudges cleared.")
+    } catch (err) {
+      console.error('Error clearing nudges:', err)
+      triggerToast("Failed to clear nudges.")
     }
   }
 
@@ -250,6 +276,14 @@ export default function Dashboard() {
       }
       setEntries(prev => [...prev, mappedEntry])
       
+      // Clear nudges for this topic since creator responded
+      await supabase
+        .from('nudges')
+        .delete()
+        .eq('topic_id', selectedTopic.id)
+      
+      setNudges(prev => prev.filter(n => n.topic_id !== selectedTopic.id))
+
       // Clear composer and draft cache
       setComposeText("")
       setComposeConfidence(50)
@@ -389,12 +423,18 @@ export default function Dashboard() {
           <div className="flex flex-row md:flex-col gap-2 md:gap-1" style={{ overflowX: "auto" }}>
             {topics.map((t) => {
               const isSelected = t.id === selectedId
+              const topicNudges = nudges.filter(n => n.topic_id === t.id)
+              const nudgeCount = topicNudges.length
               return (
                 <button 
                   key={t.id} 
                   onClick={() => setSelectedId(t.id)} 
                   className="tl-focus btn-premium" 
                   style={{ 
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    width: "100%",
                     textAlign: "left", 
                     padding: "10px 12px", 
                     borderRadius: 8, 
@@ -406,9 +446,27 @@ export default function Dashboard() {
                     flexShrink: 0 
                   }}
                 >
-                  <div className="tl-display" style={{ fontSize: 14, fontWeight: 500, color: tokens.ink, marginBottom: 3 }}>
+                  <span className="tl-display" style={{ fontSize: 14, fontWeight: 500, color: tokens.ink, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {t.title}
-                  </div>
+                  </span>
+                  {nudgeCount > 0 && (
+                    <span 
+                      className="tl-mono" 
+                      style={{ 
+                        fontSize: 10, 
+                        background: tokens.ember, 
+                        color: tokens.paper, 
+                        padding: "2px 6px", 
+                        borderRadius: 999, 
+                        fontWeight: 600,
+                        marginLeft: 8,
+                        flexShrink: 0
+                      }}
+                      title={`${nudgeCount} nudge${nudgeCount > 1 ? 's' : ''} received`}
+                    >
+                      {nudgeCount}
+                    </span>
+                  )}
                 </button>
               )
             })}
@@ -432,6 +490,45 @@ export default function Dashboard() {
                 ? "No entries logged yet" 
                 : `${entries.length} ${entries.length === 1 ? "entry" : "entries"}`}
             </p>
+
+            {/* Nudge Banner */}
+            {selectedTopicNudges.length > 0 && (
+              <div 
+                className="flex items-center justify-between animate-fade-in" 
+                style={{ 
+                  background: tokens.emberSoft, 
+                  border: `1px solid ${tokens.ember}33`, 
+                  borderRadius: 10, 
+                  padding: "12px 16px", 
+                  marginBottom: 24, 
+                  fontSize: 13.5, 
+                  color: tokens.ember 
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <span style={{ fontSize: 16 }}>🔔</span>
+                  <span>
+                    <strong>{selectedTopicNudges.length} {selectedTopicNudges.length === 1 ? 'person wants' : 'people want'}</strong> an update on this topic!
+                  </span>
+                </div>
+                <button 
+                  onClick={() => clearNudges(selectedTopic.id)}
+                  className="tl-focus btn-premium" 
+                  style={{ 
+                    background: "transparent", 
+                    border: "none", 
+                    color: tokens.ember, 
+                    textDecoration: "underline", 
+                    cursor: "pointer", 
+                    fontSize: 12.5, 
+                    fontWeight: 500,
+                    padding: 0
+                  }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
 
             {/* Recharts Chart */}
             <ConfidenceChart entries={entries} />

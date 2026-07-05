@@ -104,9 +104,22 @@ export default function TopicDetail() {
     }
   }
 
-  function handleNudge() {
-    setToastMsg(`Nudge sent to @${username} for an update.`)
-    setTimeout(() => setToastMsg(""), 3000)
+  async function handleNudge() {
+    try {
+      const { error } = await supabase
+        .from('nudges')
+        .insert({
+          topic_id: topic.id,
+          nudger_id: currentProfile?.id || null
+        })
+      if (error) throw error
+      setToastMsg(`Nudge sent to @${username} for an update.`)
+    } catch (err) {
+      console.error('Error sending nudge:', err)
+      setToastMsg("Could not send nudge. Please try again.")
+    } finally {
+      setTimeout(() => setToastMsg(""), 3000)
+    }
   }
 
   if (loading) {
