@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import Landing from './pages/Landing'
@@ -7,21 +7,21 @@ import Discover from './pages/Discover'
 import Profile from './pages/Profile'
 import TopicDetail from './pages/TopicDetail'
 import Settings from './pages/Settings'
-import { Compass, LogOut, Settings as SettingsIcon, ChevronDown, User as UserIcon } from 'lucide-react'
+import { Compass, LogOut, Settings as SettingsIcon, ChevronDown, User as UserIcon, Moon, Sun } from 'lucide-react'
 
 const tokens = {
-  paper: "#F1EEE4",
-  paperDeep: "#E8E3D5",
-  card: "#FBF9F3",
-  ink: "#211F1B",
-  inkSoft: "#6B6459",
-  inkFaint: "#9C9587",
-  pine: "#2F4A3D",
-  pineSoft: "#E3E9E0",
-  plum: "#4B3B5C",
-  plumSoft: "#EAE3EE",
-  line: "#D9D2C0",
-  danger: "#8C4A3A",
+  paper: "var(--color-paper)",
+  paperDeep: "var(--color-paper-deep)",
+  card: "var(--color-card)",
+  ink: "var(--color-ink)",
+  inkSoft: "var(--color-ink-soft)",
+  inkFaint: "var(--color-ink-faint)",
+  pine: "var(--color-pine)",
+  pineSoft: "var(--color-pine-soft)",
+  plum: "var(--color-plum)",
+  plumSoft: "var(--color-plum-soft)",
+  line: "var(--color-line)",
+  danger: "var(--color-danger)",
 }
 
 // Subcomponent: Navigation Bar
@@ -30,6 +30,16 @@ function NavBar() {
   const navigate = useNavigate()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light')
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('theme', theme)
+  }, [theme])
+
+  function toggleTheme() {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark')
+  }
 
   // Don't show navigation on the Landing/Auth page
   if (location.pathname === '/') return null
@@ -99,8 +109,26 @@ function NavBar() {
         )}
       </div>
 
-      {user ? (
-        <div style={{ position: "relative" }}>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={toggleTheme}
+          className="tl-focus btn-premium flex items-center justify-center"
+          title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} mode`}
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            border: `1px solid ${tokens.line}`,
+            background: tokens.card,
+            color: tokens.ink,
+            cursor: "pointer"
+          }}
+        >
+          {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+        </button>
+
+        {user ? (
+          <div style={{ position: "relative" }}>
           <button
             onClick={() => setMenuOpen(s => !s)}
             className="tl-focus flex items-center gap-2"
@@ -188,6 +216,7 @@ function NavBar() {
           </Link>
         </div>
       )}
+      </div>
     </div>
   )
 }

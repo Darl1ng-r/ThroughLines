@@ -19,6 +19,23 @@
   --font-mono: 'IBM Plex Mono', monospace;
 }
 
+[data-theme="dark"] {
+  --color-paper: #181715;
+  --color-paper-deep: #22201D;
+  --color-card: #201E1B;
+  --color-ink: #EAE5D9;
+  --color-ink-soft: #A8A092;
+  --color-ink-faint: #736C61;
+  --color-pine: #56826E;
+  --color-pine-soft: #23352C;
+  --color-plum: #947EAA;
+  --color-plum-soft: #30263B;
+  --color-ember: #D98852;
+  --color-ember-soft: #3D291C;
+  --color-line: #38342E;
+  --color-danger: #C46754;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -196,6 +213,26 @@ body {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(33, 31, 27, 0.05);
 }
-.btn-premium:active {
-  transform: translateY(0);
+/* Modal Overlay */
+.tl-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(18, 16, 14, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: tl-fade-in 0.2s ease both;
+}
+
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
 }

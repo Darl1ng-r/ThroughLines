@@ -6,19 +6,19 @@ import ConfidenceChart from '../components/ConfidenceChart'
 import { ArrowLeft, Send } from 'lucide-react'
 
 const tokens = {
-  paper: "#F1EEE4",
-  paperDeep: "#E8E3D5",
-  card: "#FBF9F3",
-  ink: "#211F1B",
-  inkSoft: "#6B6459",
-  inkFaint: "#9C9587",
-  pine: "#2F4A3D",
-  pineSoft: "#E3E9E0",
-  plum: "#4B3B5C",
-  plumSoft: "#EAE3EE",
-  ember: "#AD6330",
-  emberSoft: "#F3E5D8",
-  line: "#D9D2C0",
+  paper: "var(--color-paper)",
+  paperDeep: "var(--color-paper-deep)",
+  card: "var(--color-card)",
+  ink: "var(--color-ink)",
+  inkSoft: "var(--color-ink-soft)",
+  inkFaint: "var(--color-ink-faint)",
+  pine: "var(--color-pine)",
+  pineSoft: "var(--color-pine-soft)",
+  plum: "var(--color-plum)",
+  plumSoft: "var(--color-plum-soft)",
+  ember: "var(--color-ember)",
+  emberSoft: "var(--color-ember-soft)",
+  line: "var(--color-line)",
 }
 
 function Meter({ value }) {
@@ -55,7 +55,6 @@ export default function TopicDetail() {
       setLoading(true)
       setError("")
 
-      // 1. Get profile by username
       const { data: profileData, error: profileErr } = await supabase
         .from('profiles')
         .select('*')
@@ -70,7 +69,6 @@ export default function TopicDetail() {
       }
       setProfile(profileData)
 
-      // 2. Get topic by slug & user_id
       const { data: topicData, error: topicErr } = await supabase
         .from('topics')
         .select('*')
@@ -86,7 +84,6 @@ export default function TopicDetail() {
       }
       setTopic(topicData)
 
-      // 3. Get approved public posts
       const { data: postsData, error: postsErr } = await supabase
         .from('public_posts')
         .select('*')
@@ -142,17 +139,16 @@ export default function TopicDetail() {
     )
   }
 
-  // Format entries for chart
   const chartEntries = posts.map(p => ({
     entry_date: p.entry_date,
     confidence_rating: p.confidence_rating,
-    visibility: 'public'
+    visibility: 'public',
+    text: p.content
   }))
 
   return (
     <div className="tl-scroll" style={{ flex: 1, overflowY: "auto", maxHeight: "calc(100vh - 58px)" }}>
       <div style={{ maxWidth: 640, margin: "0 auto", padding: "28px 24px 80px" }}>
-        {/* Back Button */}
         <button 
           onClick={() => navigate(`/${username}`)} 
           className="tl-focus flex items-center gap-1 btn-premium" 
@@ -181,7 +177,7 @@ export default function TopicDetail() {
           @{username}
         </p>
         
-        <h1 className="tl-display" style={{ fontSize: 28, fontWeight: 600, marginBottom: 6 }}>
+        <h1 className="tl-display" style={{ fontSize: 28, fontWeight: 600, marginBottom: 6, color: tokens.ink }}>
           {topic.title}
         </h1>
         
@@ -223,7 +219,6 @@ export default function TopicDetail() {
 
                 return (
                   <div key={entry.id} className="tl-entry flex gap-4" style={{ position: "relative" }}>
-                    {/* Dot */}
                     <div style={{ 
                       width: 12, 
                       height: 12, 
@@ -234,7 +229,6 @@ export default function TopicDetail() {
                       marginTop: 6 
                     }} />
                     
-                    {/* Card Content */}
                     <div style={{ flex: 1, background: tokens.card, border: `1px solid ${tokens.line}`, borderRadius: 10, padding: "14px 16px" }}>
                       <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
                         <div className="flex items-center gap-3">
@@ -255,7 +249,6 @@ export default function TopicDetail() {
           </div>
         )}
 
-        {/* Nudge Creator Button */}
         {!isSelf && (
           <button
             onClick={handleNudge}
@@ -277,7 +270,6 @@ export default function TopicDetail() {
         )}
       </div>
 
-      {/* Toast Notification */}
       {toastMsg && (
         <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: tokens.ink, color: tokens.paper, padding: "10px 18px", borderRadius: 999, fontSize: 13, boxShadow: "0 8px 24px rgba(0,0,0,0.2)", zIndex: 50 }}>
           {toastMsg}

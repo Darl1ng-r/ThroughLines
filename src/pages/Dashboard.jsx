@@ -12,7 +12,12 @@ import {
   Eye,
   CheckCircle,
   Clock,
-  AlertCircle
+  AlertCircle,
+  Search,
+  Filter,
+  Download,
+  Printer,
+  Share2
 } from 'lucide-react'
 
 const tokens = {
@@ -92,8 +97,47 @@ export default function Dashboard() {
   
   const [toastMsg, setToastMsg] = useState("")
 
+  // Filtering & Search
+  const [entrySearch, setEntrySearch] = useState("")
+  const [filterVisibility, setFilterVisibility] = useState("ALL")
+  const [showShareModal, setShowShareModal] = useState(false)
+
   const selectedTopic = topics.find(t => t.id === selectedId) || null
   const selectedTopicNudges = nudges.filter(n => n.topic_id === selectedId)
+
+  // Filtered entries
+  const filteredEntries = entries.filter(e => {
+    const isPublic = e.public_posts && e.public_posts.length > 0
+    if (filterVisibility === 'PUBLIC' && !isPublic) return false
+    if (filterVisibility === 'PRIVATE' && isPublic) return false
+    if (entrySearch.trim()) {
+      const q = entrySearch.toLowerCase()
+      return (e.content || "").toLowerCase().includes(q)
+    }
+    return true
+  })
+
+  function exportMarkdown() {
+    if (!selectedTopic || entries.length === 0) return
+    let md = `# ${selectedTopic.title}\n`
+    md += `*Throughline Journal — Exported on ${new Date().toLocaleDateString()}*\n\n`
+    entries.forEach((e, i) => {
+      const isPublic = e.public_posts && e.public_posts.length > 0
+      md += `### Entry ${i + 1} — ${e.entry_date}\n`
+      md += `- **Confidence:** ${e.confidence_rating}%\n`
+      md += `- **Visibility:** ${isPublic ? 'Public' : 'Private'}\n\n`
+      md += `${e.content}\n\n---\n\n`
+    })
+
+    const blob = new Blob([md], { type: "text/markdown;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `${selectedTopic.slug || 'throughline'}-journal.md`
+    link.click()
+    URL.revokeObjectURL(url)
+    triggerToast("Exported timeline as Markdown (.md)")
+  }
 
   useEffect(() => {
     if (user) {
@@ -482,14 +526,79 @@ export default function Dashboard() {
           </div>
         ) : (
           <div style={{ maxWidth: 640, margin: "0 auto", padding: "36px 24px 80px" }}>
-            <h1 className="tl-display" style={{ fontSize: 28, fontWeight: 600, marginBottom: 6 }}>
-              {selectedTopic.title}
-            </h1>
-            <p className="tl-mono" style={{ fontSize: 12, color: tokens.inkFaint, marginBottom: 24 }}>
-              {entries.length === 0 
-                ? "No entries logged yet" 
-                : `${entries.length} ${entries.length === 1 ? "entry" : "entries"}`}
-            </p>
+            <div className="flex items-center justify-between flex-wrap gap-3" style={{ marginBottom: 20 }}>
+              <div>
+                <h1 className="tl-display" style={{ fontSize: 28, fontWeight: 600, margin: "0 0 4px" }}>
+                  {selectedTopic.title}
+                </h1>
+                <p className="tl-mono" style={{ fontSize: 12, color: tokens.inkFaint, margin: 0 }}>
+                  {entries.length === 0 
+                    ? "No entries logged yet" 
+                    : `${entries.length} ${entries.length === 1 ? "entry" : "entries"}`}
+                </p>
+              </div>
+
+              {/* Action Toolbar */}
+              <div className="flex items-center gap-2 flex-wrap no-print">
+                <button 
+                  onClick={exportMarkdown} 
+                  className="tl-focus btn-premium flex items-center gap-1"
+                  title="Export timeline as Markdown"
+                  style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${tokens.line}`, background: tokens.card, color: tokens.ink, fontSize: 12, fontWeight: 500, cursor: "pointer" }}
+                >
+                  <Download size={13} /> Export .md
+                </button>
+
+                <button 
+                  onClick={() => window.print()} 
+                  className="tl-focus btn-premium flex items-center gap-1"
+                  title="Print or export as PDF"
+                  style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${tokens.line}`, background: tokens.card, color: tokens.ink, fontSize: 12, fontWeight: 500, cursor: "pointer" }}
+                >
+                  <Printer size={13} /> Print
+                </button>
+
+                <button 
+                  onClick={() => setShowShareModal(true)} 
+                  className="tl-focus btn-premium flex items-center gap-1"
+                  title="Generate Share Card"
+                  style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${tokens.line}`, background: tokens.pineSoft, color: tokens.pine, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                >
+                  <Share2 size={13} /> Share Card
+                </button>
+              </div>
+            </div>
+
+            {/* Filter & Search Bar */}
+            {entries.length > 0 && (
+              <div className="flex items-center gap-2 flex-wrap no-print" style={{ marginBottom: 20, background: tokens.card, border: `1px solid ${tokens.line}`, borderRadius: 8, padding: "8px 12px" }}>
+                <div className="flex items-center gap-2 flex-1" style={{ minWidth: 180 }}>
+                  <Search size={14} color={tokens.inkFaint} />
+                  <input
+                    type="text"
+                    value={entrySearch}
+                    onChange={(e) => setEntrySearch(e.target.value)}
+                    placeholder="Search entries..."
+                    className="tl-focus"
+                    style={{ width: "100%", border: "none", outline: "none", background: "transparent", fontSize: 13, color: tokens.ink }}
+                  />
+                </div>
+                
+                <div className="flex items-center gap-1" style={{ borderLeft: `1px solid ${tokens.line}`, paddingLeft: 12 }}>
+                  <Filter size={13} color={tokens.inkFaint} />
+                  <select
+                    value={filterVisibility}
+                    onChange={(e) => setFilterVisibility(e.target.value)}
+                    className="tl-focus tl-mono"
+                    style={{ border: "none", background: "transparent", fontSize: 11, color: tokens.inkSoft, cursor: "pointer", outline: "none" }}
+                  >
+                    <option value="ALL">All Entries</option>
+                    <option value="PUBLIC">Public Only</option>
+                    <option value="PRIVATE">Private Only</option>
+                  </select>
+                </div>
+              </div>
+            )}
 
             {/* Nudge Banner */}
             {selectedTopicNudges.length > 0 && (
@@ -549,8 +658,12 @@ export default function Dashboard() {
               <div className="flex flex-col gap-6">
                 {loadingEntries ? (
                   <div className="tl-mono" style={{ fontSize: 12, color: tokens.inkSoft, paddingLeft: 24 }}>Loading timeline...</div>
+                ) : filteredEntries.length === 0 ? (
+                  <div className="tl-mono" style={{ fontSize: 12, color: tokens.inkFaint, paddingLeft: 24, fontStyle: 'italic' }}>
+                    {entries.length === 0 ? "No entries logged yet." : "No entries match your search/filter."}
+                  </div>
                 ) : (
-                  entries.map((entry) => {
+                  filteredEntries.map((entry) => {
                     const isPublic = entry.public_posts && entry.public_posts.length > 0
                     const status = isPublic ? entry.public_posts[0].moderation_status : null
                     
@@ -734,6 +847,82 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Share Card Modal */}
+      {showShareModal && selectedTopic && (
+        <div className="tl-modal-overlay" onClick={() => setShowShareModal(false)}>
+          <div 
+            onClick={(e) => e.stopPropagation()} 
+            style={{ 
+              background: tokens.card, 
+              border: `1px solid ${tokens.line}`, 
+              borderRadius: 12, 
+              padding: 24, 
+              maxWidth: 480, 
+              width: "100%", 
+              boxShadow: "0 12px 32px rgba(0,0,0,0.18)" 
+            }}
+          >
+            <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
+              <span className="tl-mono" style={{ fontSize: 11, color: tokens.pine, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600 }}>
+                🌿 Shareable Throughline Card
+              </span>
+              <button 
+                onClick={() => setShowShareModal(false)}
+                style={{ border: "none", background: "transparent", cursor: "pointer", color: tokens.inkFaint }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Render Card Preview */}
+            <div style={{ background: tokens.paper, border: `1px solid ${tokens.line}`, borderRadius: 10, padding: 20, marginBottom: 20 }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+                <span className="tl-mono" style={{ fontSize: 11, color: tokens.pine }}>Throughline</span>
+                <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint }}>{entries.length} entries</span>
+              </div>
+              <h2 className="tl-display" style={{ fontSize: 20, fontWeight: 600, margin: "0 0 10px", color: tokens.ink }}>
+                {selectedTopic.title}
+              </h2>
+              {entries.length > 0 && (
+                <p style={{ fontSize: 13.5, lineHeight: 1.5, color: tokens.inkSoft, margin: "0 0 14px", fontStyle: "italic" }}>
+                  "{entries[entries.length - 1].content}"
+                </p>
+              )}
+              <div className="flex items-center justify-between">
+                <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint }}>
+                  Latest confidence: <strong style={{ color: tokens.pine }}>{entries.length > 0 ? entries[entries.length - 1].confidence_rating : 50}%</strong>
+                </span>
+                <span className="tl-display" style={{ fontSize: 13, fontWeight: 600, color: tokens.ink }}>
+                  Throughlines.app
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <button 
+                onClick={() => setShowShareModal(false)} 
+                className="tl-focus btn-premium"
+                style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${tokens.line}`, background: "transparent", color: tokens.ink, fontSize: 13, cursor: "pointer" }}
+              >
+                Close
+              </button>
+              <button 
+                onClick={() => {
+                  const shareText = `Check out my throughline on "${selectedTopic.title}": ${window.location.origin}/dashboard`
+                  navigator.clipboard.writeText(shareText)
+                  triggerToast("Summary & Link copied to clipboard!")
+                  setShowShareModal(false)
+                }} 
+                className="tl-focus btn-premium"
+                style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: tokens.pine, color: tokens.paper, fontSize: 13, fontWeight: 500, cursor: "pointer" }}
+              >
+                Copy Link & Summary
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast Notification */}
       {toastMsg && (
