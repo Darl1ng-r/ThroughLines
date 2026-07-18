@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../services/supabaseClient'
-import { ArrowUpRight, Compass, Search, Bookmark, BookmarkCheck, Share2 } from 'lucide-react'
+import { ArrowUpRight, Compass, Search, Bookmark, Share2, Sparkles, SlidersHorizontal } from 'lucide-react'
 
 const tokens = {
   paper: "var(--color-paper)",
@@ -14,6 +14,7 @@ const tokens = {
   pineSoft: "var(--color-pine-soft)",
   line: "var(--color-line)",
   plum: "var(--color-plum)",
+  ember: "var(--color-ember)",
 }
 
 export default function Discover() {
@@ -21,10 +22,11 @@ export default function Discover() {
   const [topics, setTopics] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
-  const [activeTab, setActiveTab] = useState("all") // "all" | "bookmarked"
+  const [feedTab, setFeedTab] = useState("all") // "all" | "bookmarked"
+  const [algoMode, setAlgoMode] = useState("smart") // "smart" | "evolved" | "recent" | "conviction" | "questioning"
   const [bookmarks, setBookmarks] = useState(() => {
     try {
-      return JSON.parse(localStorage.getItem('bookmarked_throughlines') || '[]')
+      return JSON.parse(localStorage.getItem('tl_bookmarks') || '[]')
     } catch (_) {
       return []
     }
@@ -60,11 +62,6 @@ export default function Discover() {
     triggerToast("Link & snippet copied to clipboard!")
   }
 
-  function triggerToast(msg) {
-    setToastMsg(msg)
-    setTimeout(() => setToastMsg(""), 3000)
-  }
-
   async function fetchDiscoverFeed() {
     try {
       setLoading(true)
@@ -98,10 +95,37 @@ export default function Discover() {
           const sortedPosts = [...t.public_posts].sort(
             (a, b) => new Date(a.entry_date) - new Date(b.entry_date)
           )
+          const firstConfidence = sortedPosts[0]?.confidence_rating || 50
+          const latestPost = sortedPosts[sortedPosts.length - 1]
+          const latestConfidence = latestPost?.confidence_rating || 50
+          const delta = Math.abs(latestConfidence - firstConfidence)
+          
+          // Time decay in days since latest post
+          const lastDate = new Date(latestPost.entry_date)
+          const now = new Date()
+          const daysAgo = Math.max(0, (now.getTime() - lastDate.getTime()) / (1000 * 3600 * 24))
+          const decay = 1 / Math.pow(1 + daysAgo, 0.75)
+
+          // Mindscape Score calculation
+          const score = (10 * Math.log(1 + sortedPosts.length) + 0.6 * delta + (bookmarks.includes(t.id) ? 15 : 0)) * decay
+
+          // Badge determination
+          let badge = "💡 Evolving Mind"
+          if (daysAgo <= 2) badge = "🆕 Fresh Thought"
+          else if (delta >= 25) badge = "🔥 High Evolution"
+          else if (sortedPosts.length >= 4) badge = "🌿 Deep Journey"
+          else if (delta >= 15) badge = "⚡ Shifted Mindset"
+
           return {
             ...t,
             public_posts: sortedPosts,
-            latestPost: sortedPosts[sortedPosts.length - 1],
+            latestPost,
+            firstConfidence,
+            latestConfidence,
+            delta,
+            score,
+            daysAgo,
+            badge,
             span: `${sortedPosts.length} ${sortedPosts.length === 1 ? 'entry' : 'entries'}`
           }
         })
@@ -114,6 +138,7 @@ export default function Discover() {
     }
   }
 
+  // 1. Filter feed by tab and search
   const filteredFeed = topics.filter(t => {
     if (feedTab === "bookmarked" && !bookmarks.includes(t.id)) return false
     const query = searchQuery.toLowerCase()
@@ -123,6 +148,26 @@ export default function Discover() {
       (t.profiles?.display_name || "").toLowerCase().includes(query) ||
       t.public_posts.some(p => p.content.toLowerCase().includes(query))
     )
+  })
+
+  // 2. Sort feed using selected algorithm mode
+  const sortedFeed = [...filteredFeed].sort((a, b) => {
+    if (algoMode === "smart") {
+      return b.score - a.score
+    }
+    if (algoMode === "evolved") {
+      return b.delta - a.delta || b.public_posts.length - a.public_posts.length
+    }
+    if (algoMode === "recent") {
+      return new Date(b.latestPost.entry_date) - new Date(a.latestPost.entry_date)
+    }
+    if (algoMode === "conviction") {
+      return b.latestConfidence - a.latestConfidence
+    }
+    if (algoMode === "questioning") {
+      return a.latestConfidence - b.latestConfidence
+    }
+    return 0
   })
 
   return (
@@ -179,37 +224,74 @@ export default function Discover() {
           Other people's evolving thoughts, out in the open.
         </p>
 
-        {/* Search Bar */}
-        <div style={{ position: 'relative', marginBottom: 28 }}>
-          <Search 
-            size={16} 
-            color={tokens.inkFaint} 
-            style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} 
-          />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search topics, content, or writers..."
-            className="tl-focus tl-input"
-            style={{
-              width: "100%",
-              padding: "10px 12px 10px 38px",
-              borderRadius: 8,
-              border: `1px solid ${tokens.line}`,
-              background: tokens.card,
-              color: tokens.ink,
-              fontSize: 14,
-              fontFamily: "inherit"
-            }}
-          />
+        {/* Search & Algorithm Controls */}
+        <div className="flex flex-col gap-3" style={{ marginBottom: 28 }}>
+          <div style={{ position: 'relative' }}>
+            <Search 
+              size={16} 
+              color={tokens.inkFaint} 
+              style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} 
+            />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search topics, content, or writers..."
+              className="tl-focus tl-input"
+              style={{
+                width: "100%",
+                padding: "10px 12px 10px 38px",
+                borderRadius: 8,
+                border: `1px solid ${tokens.line}`,
+                background: tokens.card,
+                color: tokens.ink,
+                fontSize: 14,
+                fontFamily: "inherit"
+              }}
+            />
+          </div>
+
+          {/* Algorithm Mode Switcher */}
+          <div className="flex items-center gap-2 flex-wrap" style={{ background: tokens.card, border: `1px solid ${tokens.line}`, borderRadius: 8, padding: "6px 12px" }}>
+            <div className="flex items-center gap-1.5 tl-mono" style={{ fontSize: 11, color: tokens.pine, fontWeight: 600 }}>
+              <Sparkles size={13} color={tokens.pine} /> Mindscape Algorithm:
+            </div>
+            
+            <div className="flex items-center gap-1 flex-wrap flex-1 justify-end">
+              {[
+                { id: "smart", label: "✨ Smart Feed" },
+                { id: "evolved", label: "⚡ Most Evolved" },
+                { id: "recent", label: "⏱️ Fresh Updates" },
+                { id: "conviction", label: "🎯 High Conviction" },
+                { id: "questioning", label: "🤔 Questioning" },
+              ].map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={() => setAlgoMode(opt.id)}
+                  className="tl-focus"
+                  style={{
+                    padding: "3px 9px",
+                    borderRadius: 6,
+                    border: "none",
+                    fontSize: 11,
+                    fontWeight: algoMode === opt.id ? 600 : 400,
+                    cursor: "pointer",
+                    background: algoMode === opt.id ? tokens.pineSoft : "transparent",
+                    color: algoMode === opt.id ? tokens.pine : tokens.inkSoft,
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {loading ? (
           <div style={{ textAlign: "center", padding: "40px 0", color: tokens.inkSoft }} className="tl-mono">
             Loading public minds...
           </div>
-        ) : filteredFeed.length === 0 ? (
+        ) : sortedFeed.length === 0 ? (
           <div style={{ textAlign: "center", padding: "40px 0", color: tokens.inkSoft, background: tokens.card, borderRadius: 10, border: `1px dashed ${tokens.line}` }}>
             <p className="tl-display" style={{ fontSize: 16, marginBottom: 4 }}>
               {feedTab === "bookmarked" ? "No bookmarked throughlines yet" : "No throughlines found"}
@@ -220,7 +302,7 @@ export default function Discover() {
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            {filteredFeed.map((topic) => {
+            {sortedFeed.map((topic) => {
               const isBookmarked = bookmarks.includes(topic.id)
               return (
                 <div 
@@ -235,21 +317,36 @@ export default function Discover() {
                   }}
                 >
                   <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-                    <button 
-                      onClick={() => navigate(`/${topic.profiles?.username}`)}
-                      className="tl-mono tl-focus"
-                      style={{ 
-                        fontSize: 12, 
-                        color: tokens.pine, 
-                        background: "none", 
-                        border: "none", 
-                        cursor: "pointer",
-                        fontWeight: 600,
-                        padding: 0
-                      }}
-                    >
-                      @{topic.profiles?.username || 'anonymous'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={() => navigate(`/${topic.profiles?.username}`)}
+                        className="tl-mono tl-focus"
+                        style={{ 
+                          fontSize: 12, 
+                          color: tokens.pine, 
+                          background: "none", 
+                          border: "none", 
+                          cursor: "pointer",
+                          fontWeight: 600,
+                          padding: 0
+                        }}
+                      >
+                        @{topic.profiles?.username || 'anonymous'}
+                      </button>
+                      <span 
+                        className="tl-mono" 
+                        style={{ 
+                          fontSize: 10, 
+                          padding: "2px 7px", 
+                          borderRadius: 999, 
+                          background: tokens.paperDeep, 
+                          color: tokens.inkSoft,
+                          fontWeight: 500
+                        }}
+                      >
+                        {topic.badge}
+                      </span>
+                    </div>
 
                     <div className="flex items-center gap-3">
                       <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint }}>
@@ -285,10 +382,17 @@ export default function Discover() {
                     {topic.latestPost?.content}
                   </p>
                   
-                  <div className="flex items-center justify-between">
-                    <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint }}>
-                      Latest confidence: <strong style={{ color: tokens.pine }}>{topic.latestPost?.confidence_rating}%</strong>
-                    </span>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-3">
+                      <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint }}>
+                        Latest confidence: <strong style={{ color: tokens.pine }}>{topic.latestConfidence}%</strong>
+                      </span>
+                      {topic.delta > 0 && (
+                        <span className="tl-mono" style={{ fontSize: 11, color: tokens.plum }}>
+                          ({topic.delta}% overall shift)
+                        </span>
+                      )}
+                    </div>
 
                     <div className="flex items-center gap-3">
                       <button
@@ -332,3 +436,4 @@ export default function Discover() {
     </div>
   )
 }
+
