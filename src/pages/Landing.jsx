@@ -22,7 +22,7 @@ const tokens = {
 
 export default function Landing() {
   const navigate = useNavigate()
-  const { signIn, signUp, signInWithGoogle } = useAuth()
+  const { signIn, signUp, signInWithGoogle, signInWithGoogleCredential } = useAuth()
 
   const [mode, setMode] = useState("login") // 'login' or 'signup'
   const [displayName, setDisplayName] = useState("")
@@ -31,6 +31,30 @@ export default function Landing() {
   const [password, setPassword] = useState("")
   const [errorMsg, setErrorMsg] = useState("")
   const [loading, setLoading] = useState(false)
+
+  // Handle Google Platform & Identity callbacks
+  React.useEffect(() => {
+    window.onSignIn = async (googleUser) => {
+      try {
+        setLoading(true)
+        if (googleUser && typeof googleUser.getAuthResponse === 'function') {
+          const authRes = googleUser.getAuthResponse()
+          if (authRes?.id_token) {
+            await signInWithGoogleCredential(authRes.id_token)
+            navigate('/dashboard')
+            return
+          }
+        }
+        await signInWithGoogle()
+        navigate('/dashboard')
+      } catch (err) {
+        console.error(err)
+        setErrorMsg(err.message || "Google Sign-In failed.")
+      } finally {
+        setLoading(false)
+      }
+    }
+  }, [])
 
   const canSubmit = mode === "login" 
     ? email.trim() && password.trim() 
@@ -68,6 +92,7 @@ export default function Landing() {
       setErrorMsg("")
       setLoading(true)
       await signInWithGoogle()
+      navigate('/dashboard')
     } catch (err) {
       console.error(err)
       setErrorMsg(err.message || "Google authentication failed. Please try again.")
@@ -211,13 +236,16 @@ export default function Landing() {
             <div style={{ flex: 1, height: 1, background: tokens.line }} />
           </div>
 
-          <button
-            onClick={handleGoogleLogin}
-            className="tl-focus flex items-center justify-center gap-2"
-            style={{ width: "100%", padding: "10px 0", borderRadius: 8, border: `1px solid ${tokens.line}`, background: tokens.card, color: tokens.ink, fontSize: 13, fontWeight: 500, cursor: "pointer" }}
-          >
-            <span className="tl-display" style={{ fontWeight: 700 }}>G</span> Continue with Google
-          </button>
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={handleGoogleLogin}
+              className="tl-focus flex items-center justify-center gap-2"
+              style={{ width: "100%", padding: "10px 0", borderRadius: 8, border: `1px solid ${tokens.line}`, background: tokens.card, color: tokens.ink, fontSize: 13, fontWeight: 500, cursor: "pointer" }}
+            >
+              <span className="tl-display" style={{ fontWeight: 700 }}>G</span> Continue with Google
+            </button>
+            <div className="g-signin2" data-onsuccess="onSignIn" style={{ display: "flex", justifyContent: "center", width: "100%" }}></div>
+          </div>
 
           {/* Privacy Shield Info */}
           <div className="flex items-start gap-2" style={{ marginTop: 24, padding: "10px 12px", background: tokens.pineSoft, borderRadius: 8 }}>
