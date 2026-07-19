@@ -33,14 +33,31 @@ export default function Discover() {
   })
   const [toastMsg, setToastMsg] = useState("")
 
-  // Feed pagination state
+  // Feed pagination & real-time updates state
   const [feedPage, setFeedPage] = useState(0)
   const [hasMoreFeed, setHasMoreFeed] = useState(true)
   const [loadingMoreFeed, setLoadingMoreFeed] = useState(false)
+  const [newUpdatesCount, setNewUpdatesCount] = useState(0)
   const FEED_PAGE_SIZE = 12
 
   useEffect(() => {
     fetchDiscoverFeed(0, true)
+
+    // Real-Time WebSocket Listener for live public posts
+    const channel = supabase
+      .channel('discover_public_posts_ws')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'public_posts' },
+        () => {
+          setNewUpdatesCount(prev => prev + 1)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [])
 
   function triggerToast(msg) {
@@ -312,6 +329,34 @@ export default function Discover() {
             </div>
           </div>
         </div>
+
+        {/* Real-time WebSocket New Updates Banner */}
+        {newUpdatesCount > 0 && (
+          <div style={{ textAlign: 'center', marginBottom: 20 }}>
+            <button
+              onClick={() => {
+                setNewUpdatesCount(0)
+                setFeedPage(0)
+                fetchDiscoverFeed(0, true)
+              }}
+              className="tl-focus btn-premium flex items-center justify-center gap-1 animate-fade-in"
+              style={{
+                margin: "0 auto",
+                padding: "8px 18px",
+                borderRadius: 999,
+                border: `1px solid ${tokens.pine}`,
+                background: tokens.pineSoft,
+                color: tokens.pine,
+                fontSize: 12.5,
+                fontWeight: 600,
+                cursor: "pointer",
+                boxShadow: "0 4px 14px rgba(47,74,61,0.15)"
+              }}
+            >
+              🌿 {newUpdatesCount} new public throughline{newUpdatesCount > 1 ? 's' : ''} published — Click to refresh feed ↵
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <div style={{ textAlign: "center", padding: "40px 0", color: tokens.inkSoft }} className="tl-mono">

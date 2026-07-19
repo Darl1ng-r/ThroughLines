@@ -183,6 +183,30 @@ export default function Dashboard() {
     }
   }, [selectedId])
 
+  // Real-Time WebSocket Listener for Nudges
+  useEffect(() => {
+    if (!user) return
+
+    const channel = supabase
+      .channel('dashboard_nudges_ws')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'nudges' },
+        (payload) => {
+          const newNudge = payload.new
+          if (newNudge && newNudge.topic_id) {
+            setNudges(prev => [...prev, newNudge])
+            triggerToast("🔔 Someone just nudged you for an update!")
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user])
+
   // Save draft cache asynchronously
   const handleComposeChange = useCallback((text) => {
     setComposeText(text)
