@@ -33,8 +33,14 @@ export default function Discover() {
   })
   const [toastMsg, setToastMsg] = useState("")
 
+  // Feed pagination state
+  const [feedPage, setFeedPage] = useState(0)
+  const [hasMoreFeed, setHasMoreFeed] = useState(true)
+  const [loadingMoreFeed, setLoadingMoreFeed] = useState(false)
+  const FEED_PAGE_SIZE = 12
+
   useEffect(() => {
-    fetchDiscoverFeed()
+    fetchDiscoverFeed(0, true)
   }, [])
 
   function triggerToast(msg) {
@@ -62,9 +68,14 @@ export default function Discover() {
     triggerToast("Link & snippet copied to clipboard!")
   }
 
-  async function fetchDiscoverFeed() {
+  async function fetchDiscoverFeed(pageNum = 0, isInitial = false) {
     try {
-      setLoading(true)
+      if (isInitial) setLoading(true)
+      else setLoadingMoreFeed(true)
+
+      const from = pageNum * FEED_PAGE_SIZE
+      const to = from + FEED_PAGE_SIZE - 1
+
       const { data, error } = await supabase
         .from('topics')
         .select(`
@@ -86,6 +97,7 @@ export default function Discover() {
           )
         `)
         .eq('public_posts.moderation_status', 'approved')
+        .range(from, to)
 
       if (error) throw error
 
@@ -130,12 +142,26 @@ export default function Discover() {
           }
         })
 
-      setTopics(filtered)
+      if (isInitial) {
+        setTopics(filtered)
+      } else {
+        setTopics(prev => [...prev, ...filtered])
+      }
+
+      setHasMoreFeed(data && data.length === FEED_PAGE_SIZE)
     } catch (err) {
       console.error('Error fetching discover feed:', err)
     } finally {
       setLoading(false)
+      setLoadingMoreFeed(false)
     }
+  }
+
+  function loadMoreFeed() {
+    if (loadingMoreFeed || !hasMoreFeed) return
+    const nextPage = feedPage + 1
+    setFeedPage(nextPage)
+    fetchDiscoverFeed(nextPage, false)
   }
 
   // 1. Filter feed by tab and search
@@ -423,6 +449,29 @@ export default function Discover() {
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {/* Feed Pagination Load More */}
+        {hasMoreFeed && topics.length > 0 && (
+          <div style={{ textAlign: "center", marginTop: 32 }}>
+            <button 
+              onClick={loadMoreFeed}
+              disabled={loadingMoreFeed}
+              className="tl-focus btn-premium"
+              style={{ 
+                padding: "10px 24px", 
+                borderRadius: 8, 
+                border: `1px solid ${tokens.line}`, 
+                background: tokens.card, 
+                color: tokens.ink, 
+                fontSize: 13, 
+                fontWeight: 500, 
+                cursor: loadingMoreFeed ? "not-allowed" : "pointer" 
+              }}
+            >
+              {loadingMoreFeed ? "Loading more throughlines..." : "Load more public throughlines"}
+            </button>
           </div>
         )}
       </div>

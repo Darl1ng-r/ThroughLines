@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
-import Landing from './pages/Landing'
-import Dashboard from './pages/Dashboard'
-import Discover from './pages/Discover'
-import Profile from './pages/Profile'
-import TopicDetail from './pages/TopicDetail'
-import Settings from './pages/Settings'
 import { Compass, LogOut, Settings as SettingsIcon, ChevronDown, User as UserIcon, Moon, Sun } from 'lucide-react'
+
+// Route-level Code Splitting for performance and small initial bundle size
+const Landing = lazy(() => import('./pages/Landing'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Discover = lazy(() => import('./pages/Discover'))
+const Profile = lazy(() => import('./pages/Profile'))
+const TopicDetail = lazy(() => import('./pages/TopicDetail'))
+const Settings = lazy(() => import('./pages/Settings'))
 
 const tokens = {
   paper: "var(--color-paper)",
@@ -245,14 +247,20 @@ function MainLayout() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: tokens.paper, color: tokens.ink }}>
       <NavBar />
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/discover" element={<Discover />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/:username" element={<Profile />} />
-        <Route path="/:username/:topicSlug" element={<TopicDetail />} />
-      </Routes>
+      <Suspense fallback={
+        <div className="tl-mono" style={{ padding: 40, textAlign: "center", color: tokens.inkSoft }}>
+          Loading view...
+        </div>
+      }>
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/discover" element={<Discover />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/:username" element={<Profile />} />
+          <Route path="/:username/:topicSlug" element={<TopicDetail />} />
+        </Routes>
+      </Suspense>
     </div>
   )
 }
