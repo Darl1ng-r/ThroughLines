@@ -102,6 +102,7 @@ export default function Dashboard() {
   const [composeText, setComposeText] = useState("")
   const [composeVisibility, setComposeVisibility] = useState("private")
   const [composeConfidence, setComposeConfidence] = useState(50)
+  const [submitting, setSubmitting] = useState(false)
   
   const [toastMsg, setToastMsg] = useState("")
 
@@ -346,9 +347,10 @@ export default function Dashboard() {
 
   async function addEntry() {
     const text = composeText.trim()
-    if (!text || !selectedTopic) return
+    if (!text || !selectedTopic || submitting) return
 
     try {
+      setSubmitting(true)
       const entryDate = new Date().toISOString()
       
       // 1. Add private entry
@@ -410,6 +412,8 @@ export default function Dashboard() {
     } catch (err) {
       console.error('Error adding entry:', err)
       triggerToast("Error saving entry.")
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -726,6 +730,7 @@ export default function Dashboard() {
                   composeVisibility={composeVisibility}
                   setComposeVisibility={setComposeVisibility}
                   onAddEntry={addEntry}
+                  submitting={submitting}
                 />
               </div>
             </div>

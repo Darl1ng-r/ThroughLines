@@ -22,7 +22,8 @@ const EntryComposer = memo(function EntryComposer({
   setComposeConfidence,
   composeVisibility,
   setComposeVisibility,
-  onAddEntry
+  onAddEntry,
+  submitting = false
 }) {
   return (
     <div className="flex gap-4" style={{ position: "relative" }}>
@@ -37,6 +38,7 @@ const EntryComposer = memo(function EntryComposer({
         
         <textarea
           value={composeText}
+          disabled={submitting}
           onChange={(e) => onComposeChange(e.target.value)}
           placeholder="Why do you believe that — today? Your drafts are saved automatically."
           rows={3}
@@ -51,7 +53,8 @@ const EntryComposer = memo(function EntryComposer({
             fontFamily: "inherit", 
             background: "transparent", 
             color: tokens.ink, 
-            marginBottom: 6 
+            marginBottom: 6,
+            opacity: submitting ? 0.6 : 1 
           }}
         />
         
@@ -62,6 +65,7 @@ const EntryComposer = memo(function EntryComposer({
             type="range" 
             min="0" 
             max="100" 
+            disabled={submitting}
             value={composeConfidence} 
             onChange={(e) => setComposeConfidence(Number(e.target.value))} 
             className="tl-range tl-focus" 
@@ -75,13 +79,14 @@ const EntryComposer = memo(function EntryComposer({
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-1" style={{ background: tokens.paperDeep, borderRadius: 999, padding: 3 }}>
             <button 
+              disabled={submitting}
               onClick={() => setComposeVisibility("private")} 
               className="tl-focus"
               style={{
                 padding: "5px 10px",
                 borderRadius: 999,
                 border: "none",
-                cursor: "pointer",
+                cursor: submitting ? "not-allowed" : "pointer",
                 fontSize: 12,
                 background: composeVisibility === "private" ? tokens.plumSoft : "transparent",
                 color: composeVisibility === "private" ? tokens.plum : tokens.inkSoft,
@@ -91,13 +96,14 @@ const EntryComposer = memo(function EntryComposer({
               <Lock size={11} style={{ marginRight: 3, verticalAlign: "middle" }} /> Private
             </button>
             <button 
+              disabled={submitting}
               onClick={() => setComposeVisibility("public")} 
               className="tl-focus"
               style={{
                 padding: "5px 10px",
                 borderRadius: 999,
                 border: "none",
-                cursor: "pointer",
+                cursor: submitting ? "not-allowed" : "pointer",
                 fontSize: 12,
                 background: composeVisibility === "public" ? tokens.pine : "transparent",
                 color: composeVisibility === "public" ? tokens.paper : tokens.inkSoft,
@@ -110,20 +116,20 @@ const EntryComposer = memo(function EntryComposer({
 
           <button 
             onClick={onAddEntry}
-            disabled={!composeText.trim()}
+            disabled={!composeText.trim() || submitting}
             className="tl-focus btn-premium flex items-center gap-1"
             style={{ 
-              background: composeText.trim() ? tokens.pine : tokens.line, 
-              color: composeText.trim() ? tokens.paper : tokens.inkFaint, 
+              background: (composeText.trim() && !submitting) ? tokens.pine : tokens.line, 
+              color: (composeText.trim() && !submitting) ? tokens.paper : tokens.inkFaint, 
               border: "none", 
               borderRadius: 8, 
               padding: "7px 14px", 
               fontSize: 13, 
               fontWeight: 500, 
-              cursor: composeText.trim() ? "pointer" : "not-allowed" 
+              cursor: (composeText.trim() && !submitting) ? "pointer" : "not-allowed" 
             }}
           >
-            <Send size={13} /> Log entry
+            <Send size={13} /> {submitting ? "Logging entry..." : "Log entry"}
           </button>
         </div>
       </div>

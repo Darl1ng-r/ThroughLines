@@ -46,6 +46,7 @@ export default function TopicDetail() {
   const [error, setError] = useState("")
   const [toastMsg, setToastMsg] = useState("")
   const [selectedEntryId, setSelectedEntryId] = useState(null)
+  const [nudgeCooldown, setNudgeCooldown] = useState(0)
 
   const isSelf = currentProfile && currentProfile.username === username
 
@@ -112,8 +113,40 @@ export default function TopicDetail() {
     }
   }
 
+  // Rate limiting cooldown timer for Nudge action
+  useEffect(() => {
+    if (!topic?.id) return
+    const key = `nudge_cooldown_${topic.id}`
+    const lastNudgeTime = sessionStorage.getItem(key)
+    if (lastNudgeTime) {
+      const elapsed = Math.floor((Date.now() - Number(lastNudgeTime)) / 1000)
+      if (elapsed < 30) {
+        setNudgeCooldown(30 - elapsed)
+      }
+    }
+  }, [topic?.id])
+
+  useEffect(() => {
+    if (nudgeCooldown <= 0) return
+    const timer = setInterval(() => {
+      setNudgeCooldown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [nudgeCooldown])
+
   async function handleNudge() {
+    if (!topic || nudgeCooldown > 0) return
     try {
+      const key = `nudge_cooldown_${topic.id}`
+      sessionStorage.setItem(key, String(Date.now()))
+      setNudgeCooldown(30)
+
       const { error } = await supabase
         .from('nudges')
         .insert({
@@ -121,7 +154,7 @@ export default function TopicDetail() {
           nudger_id: currentProfile?.id || null
         })
       if (error) throw error
-      setToastMsg(`Nudge sent to @${username} for an update.`)
+      setToastMsg(`Nudge sent to @${username} for an update!`)
     } catch (err) {
       console.error('Error sending nudge:', err)
       setToastMsg("Could not send nudge. Please try again.")
@@ -266,20 +299,21 @@ export default function TopicDetail() {
         {!isSelf && (
           <button
             onClick={handleNudge}
+            disabled={nudgeCooldown > 0}
             className="tl-focus flex items-center gap-2 btn-premium"
             style={{ 
               marginTop: 28, 
               padding: "9px 16px", 
               borderRadius: 8, 
-              border: `1px solid ${tokens.line}`, 
-              background: tokens.card, 
-              color: tokens.ink, 
+              border: `1px solid ${nudgeCooldown > 0 ? tokens.line : tokens.ember}`, 
+              background: nudgeCooldown > 0 ? tokens.paperDeep : tokens.card, 
+              color: nudgeCooldown > 0 ? tokens.inkFaint : tokens.ink, 
               fontSize: 13, 
               fontWeight: 500, 
-              cursor: "pointer" 
+              cursor: nudgeCooldown > 0 ? "not-allowed" : "pointer" 
             }}
           >
-            <Send size={13} /> Nudge @{username} for an update
+            <Send size={13} /> {nudgeCooldown > 0 ? `Nudge sent (Wait ${nudgeCooldown}s)` : `Nudge @${username} for an update`}
           </button>
         )}
       </div>
