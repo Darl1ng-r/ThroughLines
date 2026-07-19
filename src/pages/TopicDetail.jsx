@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext'
 import ConfidenceChart from '../components/ConfidenceChart'
 import { ArrowLeft, Send } from 'lucide-react'
 
+import MarkdownText from '../components/MarkdownText'
+
 const tokens = {
   paper: "var(--color-paper)",
   paperDeep: "var(--color-paper-deep)",
@@ -43,8 +45,17 @@ export default function TopicDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [toastMsg, setToastMsg] = useState("")
+  const [selectedEntryId, setSelectedEntryId] = useState(null)
 
   const isSelf = currentProfile && currentProfile.username === username
+
+  function handleSelectEntry(id) {
+    setSelectedEntryId(id)
+    const el = document.getElementById(`entry-${id}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }
 
   useEffect(() => {
     fetchTopicData()
@@ -140,6 +151,7 @@ export default function TopicDetail() {
   }
 
   const chartEntries = posts.map(p => ({
+    id: p.id,
     entry_date: p.entry_date,
     confidence_rating: p.confidence_rating,
     visibility: 'public',
@@ -186,7 +198,7 @@ export default function TopicDetail() {
         </p>
 
         {/* Confidence Chart */}
-        <ConfidenceChart entries={chartEntries} />
+        <ConfidenceChart entries={chartEntries} onSelectEntry={handleSelectEntry} selectedEntryId={selectedEntryId} />
 
         {/* Timeline List */}
         {posts.length === 0 ? (
@@ -217,19 +229,21 @@ export default function TopicDetail() {
                   }
                 } catch (_) {}
 
+                const isSelected = selectedEntryId === entry.id
+
                 return (
-                  <div key={entry.id} className="tl-entry flex gap-4" style={{ position: "relative" }}>
+                  <div id={`entry-${entry.id}`} key={entry.id} className="tl-entry flex gap-4" style={{ position: "relative" }}>
                     <div style={{ 
                       width: 12, 
                       height: 12, 
                       borderRadius: "50%", 
-                      background: tokens.pine, 
-                      border: `2px solid ${tokens.pine}`, 
+                      background: isSelected ? tokens.ember : tokens.pine, 
+                      border: `2px solid ${isSelected ? tokens.ember : tokens.pine}`, 
                       flexShrink: 0, 
                       marginTop: 6 
                     }} />
                     
-                    <div style={{ flex: 1, background: tokens.card, border: `1px solid ${tokens.line}`, borderRadius: 10, padding: "14px 16px" }}>
+                    <div style={{ flex: 1, background: tokens.card, border: isSelected ? `2px solid ${tokens.ember}` : `1px solid ${tokens.line}`, borderRadius: 10, padding: "14px 16px" }}>
                       <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
                         <div className="flex items-center gap-3">
                           <span className="tl-mono" style={{ fontSize: 12, color: tokens.inkFaint }}>
@@ -238,9 +252,9 @@ export default function TopicDetail() {
                           <Meter value={entry.confidence_rating} />
                         </div>
                       </div>
-                      <p style={{ fontSize: 14.5, lineHeight: 1.6, color: tokens.ink, margin: 0, whiteSpace: "pre-wrap" }}>
-                        {entry.content}
-                      </p>
+                      <div style={{ fontSize: 14.5, color: tokens.ink, margin: 0 }}>
+                        <MarkdownText content={entry.content} />
+                      </div>
                     </div>
                   </div>
                 )

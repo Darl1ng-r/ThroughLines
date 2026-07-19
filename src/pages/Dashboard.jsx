@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../services/supabaseClient'
 import ConfidenceChart from '../components/ConfidenceChart'
+import MarkdownText from '../components/MarkdownText'
+import { generatePerspectiveSynthesis } from '../services/aiSynthesisService'
 import { 
   Lock, 
   Globe, 
@@ -17,7 +19,8 @@ import {
   Filter,
   Download,
   Printer,
-  Share2
+  Share2,
+  Sparkles
 } from 'lucide-react'
 
 const tokens = {
@@ -97,10 +100,21 @@ export default function Dashboard() {
   
   const [toastMsg, setToastMsg] = useState("")
 
-  // Filtering & Search
+  // Filtering & Search & Synthesis
   const [entrySearch, setEntrySearch] = useState("")
   const [filterVisibility, setFilterVisibility] = useState("ALL")
   const [showShareModal, setShowShareModal] = useState(false)
+  const [selectedEntryId, setSelectedEntryId] = useState(null)
+  const [showSynthesis, setShowSynthesis] = useState(false)
+  const [synthesis, setSynthesis] = useState(null)
+
+  function handleSelectEntry(id) {
+    setSelectedEntryId(id)
+    const el = document.getElementById(`entry-${id}`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }
 
   const selectedTopic = topics.find(t => t.id === selectedId) || null
   const selectedTopicNudges = nudges.filter(n => n.topic_id === selectedId)
@@ -540,6 +554,23 @@ export default function Dashboard() {
 
               {/* Action Toolbar */}
               <div className="flex items-center gap-2 flex-wrap no-print">
+                {entries.length > 0 && (
+                  <button 
+                    onClick={() => {
+                      if (!synthesis) {
+                        const synth = generatePerspectiveSynthesis(selectedTopic.title, entries)
+                        setSynthesis(synth)
+                      }
+                      setShowSynthesis(prev => !prev)
+                    }} 
+                    className="tl-focus btn-premium flex items-center gap-1"
+                    title="Synthesize belief evolution with AI"
+                    style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${tokens.plum}`, background: tokens.plumSoft, color: tokens.plum, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                  >
+                    <Sparkles size={13} /> {showSynthesis ? "Hide Synthesis" : "AI Evolution Synthesis"}
+                  </button>
+                )}
+
                 <button 
                   onClick={exportMarkdown} 
                   className="tl-focus btn-premium flex items-center gap-1"
@@ -568,6 +599,52 @@ export default function Dashboard() {
                 </button>
               </div>
             </div>
+
+            {/* AI Evolution Synthesis Card */}
+            {showSynthesis && synthesis && (
+              <div 
+                className="animate-fade-in"
+                style={{ 
+                  background: tokens.card, 
+                  border: `1.5px solid ${tokens.plum}`, 
+                  borderRadius: 12, 
+                  padding: "16px 20px", 
+                  marginBottom: 20, 
+                  boxShadow: "0 6px 20px rgba(75,59,92,0.08)" 
+                }}
+              >
+                <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+                  <div className="flex items-center gap-2" style={{ color: tokens.plum, fontWeight: 600, fontSize: 14 }}>
+                    <Sparkles size={16} />
+                    <span>AI Perspective Evolution Synthesis</span>
+                  </div>
+                  <span className="tl-mono" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: tokens.plumSoft, color: tokens.plum, fontWeight: 600 }}>
+                    Stability: {synthesis.stabilityScore}%
+                  </span>
+                </div>
+
+                <p style={{ fontSize: 13.5, lineHeight: 1.6, color: tokens.ink, margin: "0 0 12px" }}>
+                  {synthesis.summary}
+                </p>
+
+                {synthesis.themes.length > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap" style={{ marginBottom: 12 }}>
+                    <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint }}>Key Themes:</span>
+                    {synthesis.themes.map((t, idx) => (
+                      <span key={idx} className="tl-mono" style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: tokens.paperDeep, color: tokens.inkSoft }}>
+                        #{t}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {synthesis.reflectionPrompt && (
+                  <div style={{ background: tokens.paper, borderRadius: 8, padding: "10px 12px", borderLeft: `3px solid ${tokens.plum}`, fontSize: 12.5, fontStyle: 'italic', color: tokens.inkSoft }}>
+                    <strong>Reflection Prompt:</strong> "{synthesis.reflectionPrompt}"
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Filter & Search Bar */}
             {entries.length > 0 && (
@@ -640,7 +717,7 @@ export default function Dashboard() {
             )}
 
             {/* Recharts Chart */}
-            <ConfidenceChart entries={entries} />
+            <ConfidenceChart entries={entries} onSelectEntry={handleSelectEntry} selectedEntryId={selectedEntryId} />
 
             {/* Timeline Spine */}
             <div style={{ position: "relative" }}>
@@ -666,6 +743,7 @@ export default function Dashboard() {
                   filteredEntries.map((entry) => {
                     const isPublic = entry.public_posts && entry.public_posts.length > 0
                     const status = isPublic ? entry.public_posts[0].moderation_status : null
+                    const isSelected = selectedEntryId === entry.id
                     
                     // Format entry date
                     let formattedDate = entry.entry_date
@@ -677,14 +755,14 @@ export default function Dashboard() {
                     } catch (_) {}
 
                     return (
-                      <div key={entry.id} className="tl-entry flex gap-4" style={{ position: "relative" }}>
+                      <div id={`entry-${entry.id}`} key={entry.id} className="tl-entry flex gap-4" style={{ position: "relative" }}>
                         {/* Dot Indicator */}
                         <div style={{ 
                           width: 12, 
                           height: 12, 
                           borderRadius: "50%", 
-                          background: isPublic ? tokens.pine : tokens.card, 
-                          border: `2px solid ${isPublic ? tokens.pine : tokens.plum}`, 
+                          background: isSelected ? tokens.ember : (isPublic ? tokens.pine : tokens.card), 
+                          border: `2px solid ${isSelected ? tokens.ember : (isPublic ? tokens.pine : tokens.plum)}`, 
                           flexShrink: 0, 
                           marginTop: 6 
                         }} />
@@ -694,9 +772,10 @@ export default function Dashboard() {
                           style={{ 
                             flex: 1, 
                             background: tokens.card, 
-                            border: `1px solid ${tokens.line}`, 
+                            border: isSelected ? `2px solid ${tokens.ember}` : `1px solid ${tokens.line}`, 
                             borderRadius: 10, 
-                            padding: "14px 16px" 
+                            padding: "14px 16px",
+                            transition: "all 0.2s ease" 
                           }}
                         >
                           <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: 8 }}>
@@ -709,9 +788,9 @@ export default function Dashboard() {
                             <VisibilityStatus visibility={isPublic ? 'public' : 'private'} status={status} />
                           </div>
                           
-                          <p style={{ fontSize: 14.5, lineHeight: 1.6, color: tokens.ink, margin: "0 0 10px", whiteSpace: "pre-wrap" }}>
-                            {entry.content}
-                          </p>
+                          <div style={{ fontSize: 14.5, color: tokens.ink, marginBottom: 10 }}>
+                            <MarkdownText content={entry.content} />
+                          </div>
                           
                           {/* Publish/Unpublish Action */}
                           {!isPublic ? (

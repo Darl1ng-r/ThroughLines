@@ -24,22 +24,41 @@ const tokens = {
 }
 
 function ChartDot(props) {
-  const { cx, cy, payload } = props
+  const { cx, cy, payload, onSelectEntry, selectedEntryId } = props
   if (!cx || !cy) return null
   const isPublic = payload.visibility === "public"
+  const isPivot = payload.isPivot
+  const isSelected = selectedEntryId && selectedEntryId === payload.id
+
   return (
-    <circle
-      cx={cx}
-      cy={cy}
-      r={5}
-      fill={isPublic ? tokens.pine : tokens.card}
-      stroke={isPublic ? tokens.pine : tokens.plum}
-      strokeWidth={2}
-    />
+    <g 
+      style={{ cursor: onSelectEntry ? "pointer" : "default" }}
+      onClick={() => onSelectEntry && payload.id && onSelectEntry(payload.id)}
+    >
+      {isPivot && (
+        <circle
+          cx={cx}
+          cy={cy}
+          r={9}
+          fill="none"
+          stroke={payload.delta > 0 ? tokens.pine : tokens.ember}
+          strokeWidth={1.5}
+          strokeDasharray="2 2"
+        />
+      )}
+      <circle
+        cx={cx}
+        cy={cy}
+        r={isSelected ? 7 : 5}
+        fill={isSelected ? tokens.ember : (isPublic ? tokens.pine : tokens.card)}
+        stroke={isPublic ? tokens.pine : tokens.plum}
+        strokeWidth={isSelected ? 3 : 2}
+      />
+    </g>
   )
 }
 
-function CustomTooltip({ active, payload, label }) {
+function CustomTooltip({ active, payload, label, onSelectEntry }) {
   if (!active || !payload || !payload.length) return null
   const data = payload[0].payload
   const deltaText = data.delta !== null ? (data.delta >= 0 ? `+${data.delta}%` : `${data.delta}%`) : null
@@ -47,6 +66,7 @@ function CustomTooltip({ active, payload, label }) {
 
   return (
     <div 
+      onClick={() => onSelectEntry && data.id && onSelectEntry(data.id)}
       style={{ 
         background: tokens.card, 
         border: `1px solid ${tokens.line}`, 
@@ -54,7 +74,8 @@ function CustomTooltip({ active, payload, label }) {
         padding: "10px 14px", 
         fontSize: 12, 
         maxWidth: 240,
-        boxShadow: "0 6px 20px rgba(0,0,0,0.15)"
+        boxShadow: "0 6px 20px rgba(0,0,0,0.15)",
+        cursor: onSelectEntry ? "pointer" : "default"
       }}
     >
       <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
@@ -73,6 +94,11 @@ function CustomTooltip({ active, payload, label }) {
             ({deltaText})
           </span>
         )}
+        {data.isPivot && (
+          <span className="tl-mono" style={{ fontSize: 9, padding: "1px 5px", borderRadius: 4, background: tokens.emberSoft, color: tokens.ember, fontWeight: 600 }}>
+            PIVOT
+          </span>
+        )}
       </div>
 
       {data.excerpt && (
@@ -80,11 +106,17 @@ function CustomTooltip({ active, payload, label }) {
           "{data.excerpt}"
         </p>
       )}
+
+      {onSelectEntry && (
+        <div className="tl-mono" style={{ fontSize: 10, color: tokens.inkFaint, marginTop: 6, paddingTop: 4, borderTop: `1px dashed ${tokens.line}` }}>
+          Click to jump to entry ↵
+        </div>
+      )}
     </div>
   )
 }
 
-export default function ConfidenceChart({ entries }) {
+export default function ConfidenceChart({ entries, onSelectEntry, selectedEntryId }) {
   if (!entries || entries.length < 2) {
     return (
       <div 
@@ -105,7 +137,7 @@ export default function ConfidenceChart({ entries }) {
     )
   }
 
-  // Format date for chart labels & compute deltas
+  // Format date for chart labels & compute deltas & pivot points
   const data = entries.map((e, index) => {
     let dateStr = e.entry_date
     try {
@@ -117,19 +149,23 @@ export default function ConfidenceChart({ entries }) {
 
     const prevConfidence = index > 0 ? entries[index - 1].confidence_rating : null
     const delta = prevConfidence !== null ? e.confidence_rating - prevConfidence : null
+    const isPivot = delta !== null && Math.abs(delta) >= 20
 
     return {
+      id: e.id,
       date: dateStr,
       confidence: e.confidence_rating,
       visibility: e.visibility,
       excerpt: e.content || e.text || "",
-      delta
+      delta,
+      isPivot
     }
   })
 
   const latestVal = data[data.length - 1].confidence
   const startVal = data[0].confidence
   const totalShift = latestVal - startVal
+  const pivotCount = data.filter(d => d.isPivot).length
 
   // Velocity calculation
   let increases = 0
@@ -178,6 +214,21 @@ export default function ConfidenceChart({ entries }) {
           >
             <VelocityIcon size={11} /> {velocityLabel}
           </span>
+          {pivotCount > 0 && (
+            <span 
+              className="tl-mono flex items-center gap-1" 
+              style={{ 
+                fontSize: 10, 
+                padding: "2px 8px", 
+                borderRadius: 999, 
+                background: tokens.emberSoft, 
+                color: tokens.ember,
+                fontWeight: 600
+              }}
+            >
+              ⚡ {pivotCount} Pivot{pivotCount > 1 ? 's' : ''}
+            </span>
+          )}
         </div>
         
         <div className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint }}>
@@ -214,7 +265,7 @@ export default function ConfidenceChart({ entries }) {
               tickLine={false} 
               width={34} 
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip onSelectEntry={onSelectEntry} />} />
             <Area 
               type="monotone" 
               dataKey="confidence" 
@@ -222,7 +273,7 @@ export default function ConfidenceChart({ entries }) {
               strokeWidth={2.5} 
               fillOpacity={1} 
               fill="url(#confidenceGradient)" 
-              dot={<ChartDot />} 
+              dot={<ChartDot onSelectEntry={onSelectEntry} selectedEntryId={selectedEntryId} />} 
               activeDot={{ r: 7 }} 
             />
           </AreaChart>
@@ -231,4 +282,5 @@ export default function ConfidenceChart({ entries }) {
     </div>
   )
 }
+
 

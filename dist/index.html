@@ -18,7 +18,16 @@
   <script src="https://apis.google.com/js/platform.js" async defer></script>
   <meta name="google-signin-client_id"
     content="508977457878-rc1m6vcfa7mo3mc7qb0kprqv09q4r38i.apps.googleusercontent.com" />
-  <script type="module" crossorigin src="/assets/index-DoQdGHCX.js"></script>
+  <!-- PWA Manifest & Service Worker -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW reg error:', err));
+      });
+    }
+  </script>
+  <script type="module" crossorigin src="/assets/index-B--LKZS5.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/index-BevCza5f.css">
 </head>
 

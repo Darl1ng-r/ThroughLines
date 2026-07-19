@@ -1,0 +1,16 @@
+{
+  "short_name": "ThroughLines",
+  "name": "ThroughLines — Evolving Thought Journal",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#F1EEE4",
+  "theme_color": "#2F4A3D",
+  "display": "standalone",
+  "description": "Track how your opinions, beliefs, and conviction evolve over time."
+}
