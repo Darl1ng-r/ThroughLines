@@ -175,9 +175,15 @@ export function AuthProvider({ children }) {
 
   async function updateProfile(updates) {
     if (!user) return
+    // Whitelist fields to prevent Mass Assignment / Over-posting vulnerabilities
+    const allowed = {}
+    if (updates.display_name !== undefined) allowed.display_name = String(updates.display_name).slice(0, 100)
+    if (updates.bio !== undefined) allowed.bio = String(updates.bio).slice(0, 500)
+    if (updates.username !== undefined) allowed.username = String(updates.username).toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30)
+
     const { error } = await supabase
       .from('profiles')
-      .update(updates)
+      .update(allowed)
       .eq('id', user.id)
 
     if (error) throw error

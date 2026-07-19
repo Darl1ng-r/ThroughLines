@@ -39,6 +39,7 @@ const EntryComposer = memo(function EntryComposer({
         <textarea
           value={composeText}
           disabled={submitting}
+          maxLength={5000}
           onChange={(e) => onComposeChange(e.target.value)}
           placeholder="Why do you believe that — today? Your drafts are saved automatically."
           rows={3}
