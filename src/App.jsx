@@ -265,12 +265,16 @@ function MainLayout() {
   )
 }
 
+import ErrorBoundary from './components/ErrorBoundary'
+
 export default function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <MainLayout />
-      </Router>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <Router>
+          <MainLayout />
+        </Router>
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }
