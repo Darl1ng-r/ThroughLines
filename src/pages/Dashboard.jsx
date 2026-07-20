@@ -4,7 +4,9 @@ import { supabase } from '../services/supabaseClient'
 import ConfidenceChart from '../components/ConfidenceChart'
 import MarkdownText from '../components/MarkdownText'
 import { generatePerspectiveSynthesis } from '../services/aiSynthesisService'
-import { saveDraft, getDraft, removeDraft } from '../services/draftStorage'
+import { getDraft, saveDraft, removeDraft } from '../services/draftStorage'
+import { publishEvent, EVENTS } from '../services/eventBusService'
+import '../services/backgroundWorker'
 import TopicSidebar from '../components/dashboard/TopicSidebar'
 import EntryComposer from '../components/dashboard/EntryComposer'
 import TimelineItem from '../components/dashboard/TimelineItem'
@@ -394,6 +396,22 @@ export default function Dashboard() {
         public_posts: publicPostObj ? [publicPostObj] : []
       }
       setEntries(prev => [...prev, mappedEntry])
+
+      // Asynchronously publish to Event Bus (Kafka / RabbitMQ stream)
+      publishEvent(EVENTS.ENTRY_CREATED, {
+        entryId: entry.id,
+        topicId: selectedTopic.id,
+        topicTitle: selectedTopic.title,
+        entries: [...entries, mappedEntry]
+      })
+
+      if (publicPostObj) {
+        publishEvent(EVENTS.PUBLIC_POST_PUBLISHED, {
+          postId: publicPostObj.id,
+          topicId: selectedTopic.id,
+          content: text
+        })
+      }
       
       // Clear nudges for this topic since creator responded
       await supabase
