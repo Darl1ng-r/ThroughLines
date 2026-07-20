@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../services/supabaseClient'
 import { ArrowUpRight, Compass, Search, Bookmark, Share2, Sparkles, SlidersHorizontal } from 'lucide-react'
+import { getCache, setCache, invalidateCache } from '../services/redisCacheService'
+import { searchFeed } from '../services/semanticSearchService'
 
 const tokens = {
   paper: "var(--color-paper)",
@@ -50,6 +52,7 @@ export default function Discover() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'public_posts' },
         () => {
+          invalidateCache('discover_feed_0')
           setNewUpdatesCount(prev => prev + 1)
         }
       )
@@ -87,8 +90,18 @@ export default function Discover() {
 
   async function fetchDiscoverFeed(pageNum = 0, isInitial = false) {
     try {
-      if (isInitial) setLoading(true)
-      else setLoadingMoreFeed(true)
+      if (isInitial) {
+        setLoading(true)
+        const cacheKey = `discover_feed_${pageNum}`
+        const cached = await getCache(cacheKey)
+        if (cached && Array.isArray(cached) && cached.length > 0) {
+          setTopics(cached)
+          setLoading(false)
+          return
+        }
+      } else {
+        setLoadingMoreFeed(true)
+      }
 
       const from = pageNum * FEED_PAGE_SIZE
       const to = from + FEED_PAGE_SIZE - 1
@@ -161,6 +174,7 @@ export default function Discover() {
 
       if (isInitial) {
         setTopics(filtered)
+        setCache(`discover_feed_${pageNum}`, filtered, 60)
       } else {
         setTopics(prev => [...prev, ...filtered])
       }
@@ -181,17 +195,14 @@ export default function Discover() {
     fetchDiscoverFeed(nextPage, false)
   }
 
-  // 1. Filter feed by tab and search
-  const filteredFeed = topics.filter(t => {
+  // 1. Filter feed by tab
+  const tabFiltered = topics.filter(t => {
     if (feedTab === "bookmarked" && !bookmarks.includes(t.id)) return false
-    const query = searchQuery.toLowerCase()
-    return (
-      t.title.toLowerCase().includes(query) ||
-      (t.profiles?.username || "").toLowerCase().includes(query) ||
-      (t.profiles?.display_name || "").toLowerCase().includes(query) ||
-      t.public_posts.some(p => p.content.toLowerCase().includes(query))
-    )
+    return true
   })
+
+  // 2. Perform semantic & fuzzy search
+  const filteredFeed = searchFeed(tabFiltered, searchQuery)
 
   // 2. Sort feed using selected algorithm mode
   const sortedFeed = [...filteredFeed].sort((a, b) => {
