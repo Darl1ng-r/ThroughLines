@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../services/supabaseClient'
-import { ArrowUpRight, Compass, Search, Bookmark, Share2, Sparkles, SlidersHorizontal } from 'lucide-react'
+import { ArrowUpRight, Compass, Search, Bookmark, Share2, Sparkles, SlidersHorizontal, Activity } from 'lucide-react'
 import { getCache, setCache, invalidateCache } from '../services/redisCacheService'
 import { searchFeed } from '../services/semanticSearchService'
+import { computeMacroBeliefTrends } from '../services/sparkAnalyticsEngine'
 
 const tokens = {
   paper: "var(--color-paper)",
@@ -26,6 +27,7 @@ export default function Discover() {
   const [searchQuery, setSearchQuery] = useState("")
   const [feedTab, setFeedTab] = useState("all") // "all" | "bookmarked"
   const [algoMode, setAlgoMode] = useState("smart") // "smart" | "evolved" | "recent" | "conviction" | "questioning"
+  const [macroTrends, setMacroTrends] = useState(null)
   const [bookmarks, setBookmarks] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('tl_bookmarks') || '[]')
@@ -34,6 +36,12 @@ export default function Discover() {
     }
   })
   const [toastMsg, setToastMsg] = useState("")
+
+  useEffect(() => {
+    if (topics.length > 0) {
+      computeMacroBeliefTrends(topics).then(res => setMacroTrends(res))
+    }
+  }, [topics])
 
   // Feed pagination & real-time updates state
   const [feedPage, setFeedPage] = useState(0)
@@ -277,6 +285,21 @@ export default function Discover() {
         <p style={{ fontSize: 14, color: tokens.inkSoft, marginBottom: 20 }}>
           Other people's evolving thoughts, out in the open.
         </p>
+
+        {/* Spark Macro Belief Trends Banner */}
+        {macroTrends && macroTrends.totalTopics > 0 && (
+          <div className="flex items-center justify-between flex-wrap gap-2 animate-fade-in" style={{ background: tokens.card, border: `1px solid ${tokens.line}`, borderRadius: 10, padding: "10px 16px", marginBottom: 24 }}>
+            <div className="flex items-center gap-2">
+              <Activity size={15} color={tokens.pine} />
+              <span className="tl-mono" style={{ fontSize: 12, fontWeight: 600, color: tokens.pine }}>
+                Apache Spark Macro Trends:
+              </span>
+              <span className="tl-mono" style={{ fontSize: 12, color: tokens.inkSoft }}>
+                Avg Shift: <strong>{macroTrends.avgShift}%</strong> | Velocity: <strong>{macroTrends.macroVelocity}</strong> | Volatility: <strong>±{macroTrends.macroVolatility}</strong>
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Search & Algorithm Controls */}
         <div className="flex flex-col gap-3" style={{ marginBottom: 28 }}>
