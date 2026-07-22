@@ -37,7 +37,7 @@ function Meter({ value }) {
 export default function TopicDetail() {
   const { username, topicSlug } = useParams()
   const navigate = useNavigate()
-  const { profile: currentProfile } = useAuth()
+  const { profile: currentProfile, user } = useAuth()
 
   const [profile, setProfile] = useState(null)
   const [topic, setTopic] = useState(null)
@@ -47,6 +47,7 @@ export default function TopicDetail() {
   const [toastMsg, setToastMsg] = useState("")
   const [selectedEntryId, setSelectedEntryId] = useState(null)
   const [nudgeCooldown, setNudgeCooldown] = useState(0)
+  const [hasNudged, setHasNudged] = useState(false)
 
   const isSelf = currentProfile && currentProfile.username === username
 
@@ -124,7 +125,19 @@ export default function TopicDetail() {
         setNudgeCooldown(30 - elapsed)
       }
     }
-  }, [topic?.id])
+
+    if (user && topic?.id) {
+      supabase
+        .from('nudges')
+        .select('id')
+        .eq('topic_id', topic.id)
+        .eq('nudger_id', user.id)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) setHasNudged(true)
+        })
+    }
+  }, [topic?.id, user])
 
   useEffect(() => {
     if (nudgeCooldown <= 0) return
@@ -141,7 +154,7 @@ export default function TopicDetail() {
   }, [nudgeCooldown])
 
   async function handleNudge() {
-    if (!topic || nudgeCooldown > 0) return
+    if (!topic || nudgeCooldown > 0 || hasNudged) return
     if (!user || !currentProfile) {
       navigate('/')
       return
@@ -159,11 +172,13 @@ export default function TopicDetail() {
         })
       if (error) {
         if (error.code === '23505') { // Unique constraint violation
+          setHasNudged(true)
           setToastMsg("You have already nudged this topic!")
         } else {
           throw error
         }
       } else {
+        setHasNudged(true)
         setToastMsg(`Nudge sent to @${username} for an update!`)
       }
     } catch (err) {
@@ -232,14 +247,42 @@ export default function TopicDetail() {
         <p className="tl-mono" style={{ fontSize: 12, color: tokens.inkFaint, marginBottom: 4 }}>
           @{username}
         </p>
-        
-        <h1 className="tl-display" style={{ fontSize: 28, fontWeight: 600, marginBottom: 6, color: tokens.ink }}>
-          {topic.title}
-        </h1>
-        
-        <p className="tl-mono" style={{ fontSize: 12, color: tokens.inkFaint, marginBottom: 24 }}>
-          {posts.length} public {posts.length === 1 ? "entry" : "entries"}
-        </p>
+        <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: 24 }}>
+          <div>
+            <h1 className="tl-display" style={{ fontSize: 28, fontWeight: 600, margin: "0 0 4px", color: tokens.ink }}>
+              {topic.title}
+            </h1>
+            <p className="tl-mono" style={{ fontSize: 12, color: tokens.inkFaint, margin: 0 }}>
+              {posts.length} public {posts.length === 1 ? "entry" : "entries"}
+            </p>
+          </div>
+
+          {!isSelf && (
+            <button
+              onClick={handleNudge}
+              disabled={hasNudged || nudgeCooldown > 0}
+              className="tl-focus btn-premium flex items-center gap-1"
+              style={{
+                padding: "8px 14px",
+                borderRadius: 8,
+                border: `1px solid ${tokens.line}`,
+                background: hasNudged ? tokens.pineSoft : tokens.emberSoft,
+                color: hasNudged ? tokens.pine : tokens.ember,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: (hasNudged || nudgeCooldown > 0) ? "default" : "pointer"
+              }}
+            >
+              <span>
+                {hasNudged 
+                  ? "✓ Nudge Sent" 
+                  : nudgeCooldown > 0 
+                    ? `Nudge (${nudgeCooldown}s)` 
+                    : "🔔 Nudge for update"}
+              </span>
+            </button>
+          )}
+        </div>
 
         {/* Confidence Chart */}
         <ConfidenceChart entries={chartEntries} onSelectEntry={handleSelectEntry} selectedEntryId={selectedEntryId} />

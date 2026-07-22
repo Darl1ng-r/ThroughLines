@@ -1,5 +1,5 @@
-import React, { memo } from 'react'
-import { Plus, X, Lock, Globe } from 'lucide-react'
+import React, { memo, useState } from 'react'
+import { Plus, X, Lock, Globe, Edit2, Trash2, Check } from 'lucide-react'
 
 const tokens = {
   paper: "var(--color-paper)",
@@ -11,6 +11,7 @@ const tokens = {
   pine: "var(--color-pine)",
   pineSoft: "var(--color-pine-soft)",
   ember: "var(--color-ember)",
+  danger: "var(--color-danger)",
   line: "var(--color-line)",
 }
 
@@ -24,8 +25,34 @@ const TopicSidebar = memo(function TopicSidebar({
   newTopicTitle,
   setNewTopicTitle,
   onCreateTopic,
-  loadingTopics
+  loadingTopics,
+  onRenameTopic,
+  onDeleteTopic
 }) {
+  const [editingTopicId, setEditingTopicId] = useState(null)
+  const [editTitle, setEditTitle] = useState("")
+
+  function handleStartRename(topic, e) {
+    e.stopPropagation()
+    setEditingTopicId(topic.id)
+    setEditTitle(topic.title)
+  }
+
+  function handleSaveRename(topicId, e) {
+    e.stopPropagation()
+    if (editTitle.trim() && onRenameTopic) {
+      onRenameTopic(topicId, editTitle.trim())
+    }
+    setEditingTopicId(null)
+  }
+
+  function handleDelete(topic, e) {
+    e.stopPropagation()
+    if (window.confirm(`Are you sure you want to delete "${topic.title}"? All entries in this throughline will be permanently removed.`)) {
+      if (onDeleteTopic) onDeleteTopic(topic.id)
+    }
+  }
+
   return (
     <div 
       style={{ 
@@ -103,11 +130,55 @@ const TopicSidebar = memo(function TopicSidebar({
           topics.map(t => {
             const isSelected = t.id === selectedId
             const nudgeCount = nudges.filter(n => n.topic_id === t.id).length
+            const isEditingThis = editingTopicId === t.id
+
+            if (isEditingThis) {
+              return (
+                <div 
+                  key={t.id}
+                  style={{
+                    padding: "6px 12px",
+                    background: tokens.paper,
+                    borderBottom: `1px solid ${tokens.line}`,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6
+                  }}
+                >
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    autoFocus
+                    className="tl-focus"
+                    style={{
+                      flex: 1,
+                      padding: "4px 6px",
+                      borderRadius: 4,
+                      border: `1px solid ${tokens.line}`,
+                      fontSize: 13,
+                      background: tokens.card
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveRename(t.id, e)
+                      if (e.key === 'Escape') setEditingTopicId(null)
+                    }}
+                  />
+                  <button onClick={(e) => handleSaveRename(t.id, e)} style={{ border: "none", background: "none", cursor: "pointer" }} title="Save">
+                    <Check size={14} color={tokens.pine} />
+                  </button>
+                  <button onClick={() => setEditingTopicId(null)} style={{ border: "none", background: "none", cursor: "pointer" }} title="Cancel">
+                    <X size={14} color={tokens.inkSoft} />
+                  </button>
+                </div>
+              )
+            }
+
             return (
-              <button
+              <div
                 key={t.id}
                 onClick={() => onSelectTopic(t.id)}
-                className="tl-focus flex items-center justify-between"
+                className="tl-focus flex items-center justify-between group"
                 style={{ 
                   width: "100%", 
                   padding: "10px 16px", 
@@ -121,29 +192,49 @@ const TopicSidebar = memo(function TopicSidebar({
                   borderLeft: isSelected ? `3px solid ${tokens.pine}` : "3px solid transparent"
                 }}
               >
-                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
                   {t.title}
                 </span>
 
-                {nudgeCount > 0 && (
-                  <span 
-                    className="tl-mono" 
-                    style={{ 
-                      fontSize: 10, 
-                      background: tokens.ember, 
-                      color: tokens.paper, 
-                      padding: "2px 6px", 
-                      borderRadius: 999, 
-                      fontWeight: 600,
-                      marginLeft: 8,
-                      flexShrink: 0
-                    }}
-                    title={`${nudgeCount} nudge${nudgeCount > 1 ? 's' : ''} received`}
-                  >
-                    {nudgeCount}
-                  </span>
-                )}
-              </button>
+                <div className="flex items-center gap-1" style={{ flexShrink: 0 }}>
+                  {nudgeCount > 0 && (
+                    <span 
+                      className="tl-mono" 
+                      style={{ 
+                        fontSize: 10, 
+                        background: tokens.ember, 
+                        color: tokens.paper, 
+                        padding: "2px 6px", 
+                        borderRadius: 999, 
+                        fontWeight: 600,
+                        marginLeft: 4
+                      }}
+                      title={`${nudgeCount} nudge${nudgeCount > 1 ? 's' : ''} received`}
+                    >
+                      {nudgeCount}
+                    </span>
+                  )}
+
+                  {isSelected && (
+                    <div className="flex items-center gap-1" style={{ marginLeft: 4 }}>
+                      <button 
+                        onClick={(e) => handleStartRename(t, e)}
+                        style={{ border: "none", background: "none", cursor: "pointer", padding: 2 }}
+                        title="Rename topic"
+                      >
+                        <Edit2 size={12} color={tokens.inkSoft} />
+                      </button>
+                      <button 
+                        onClick={(e) => handleDelete(t, e)}
+                        style={{ border: "none", background: "none", cursor: "pointer", padding: 2 }}
+                        title="Delete topic"
+                      >
+                        <Trash2 size={12} color={tokens.danger} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             )
           })
         )}

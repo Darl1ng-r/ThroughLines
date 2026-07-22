@@ -45,3 +45,29 @@ self.addEventListener('fetch', (event) => {
       .catch(() => caches.match(event.request))
   )
 })
+
+// Web Push & Push Notification Event Listeners
+self.addEventListener('push', (event) => {
+  let data = { title: '🌿 Throughline Update', body: 'Someone nudged you for an update on your throughline!' }
+  if (event.data) {
+    try {
+      data = event.data.json()
+    } catch (_) {
+      data.body = event.data.text()
+    }
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      data: data.url || '/dashboard'
+    })
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  event.waitUntil(
+    clients.openWindow(event.notification.data || '/dashboard')
+  )
+})

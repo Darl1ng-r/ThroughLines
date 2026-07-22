@@ -1,6 +1,17 @@
 import { describe, it, expect, vi } from 'vitest'
-import { initBackgroundWorkers } from '../backgroundWorker'
+import { initBackgroundWorkers, handlePublicPostWorker } from '../backgroundWorker'
 import { publishEvent, EVENTS } from '../eventBusService'
+import { supabase } from '../supabaseClient'
+
+vi.mock('../supabaseClient', () => ({
+  supabase: {
+    from: vi.fn().mockReturnValue({
+      update: vi.fn().mockReturnValue({
+        eq: vi.fn().mockResolvedValue({ data: [], error: null })
+      })
+    })
+  }
+}))
 
 describe('backgroundWorker', () => {
   it('initializes worker subscriptions and processes background events', async () => {
@@ -35,5 +46,34 @@ describe('backgroundWorker', () => {
 
     consoleSpy.mockRestore()
     cleanup()
+  })
+
+  it('scans post content and updates moderation_status in database', async () => {
+    const updateSpy = vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ data: [], error: null }) })
+    vi.mocked(supabase.from).mockReturnValue({ update: updateSpy })
+
+    await handlePublicPostWorker({
+      payload: {
+        postId: 'post_789',
+        content: 'Clean thoughtful reflection on technology'
+      }
+    })
+
+    expect(supabase.from).toHaveBeenCalledWith('public_posts')
+    expect(updateSpy).toHaveBeenCalledWith({ moderation_status: 'approved' })
+  })
+
+  it('flags post content with spam indicators', async () => {
+    const updateSpy = vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ data: [], error: null }) })
+    vi.mocked(supabase.from).mockReturnValue({ update: updateSpy })
+
+    await handlePublicPostWorker({
+      payload: {
+        postId: 'post_spam',
+        content: 'Get free-followers now at http://spam1.com http://spam2.com http://spam3.com http://spam4.com'
+      }
+    })
+
+    expect(updateSpy).toHaveBeenCalledWith({ moderation_status: 'flagged' })
   })
 })

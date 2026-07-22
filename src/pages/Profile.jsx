@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../services/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { ArrowLeft, ArrowUpRight, Award, Bell } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, Award, Bell, ChevronDown } from 'lucide-react'
 
 const tokens = {
   paper: "var(--color-paper)",
@@ -16,63 +16,8 @@ const tokens = {
   plum: "var(--color-plum)",
   plumSoft: "var(--color-plum-soft)",
   ember: "var(--color-ember)",
-  emberSoft: "var(--color-ember-soft)",
   line: "var(--color-line)",
 }
-
-export default function Profile() {
-  const { username } = useParams()
-  const navigate = useNavigate()
-  const { profile: currentProfile, user } = useAuth()
-  
-  const [profile, setProfile] = useState(null)
-  const [topics, setTopics] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-  const [nudgedTopicId, setNudgedTopicId] = useState(null)
-
-  const isSelf = currentProfile && currentProfile.username === username
-
-  useEffect(() => {
-    fetchProfileAndTopics()
-  }, [username])
-
-  async function fetchProfileAndTopics() {
-    try {
-      setLoading(true)
-      setError("")
-
-      const { data: profileData, error: profileErr } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('username', username)
-        .maybeSingle()
-
-      if (profileErr) throw profileErr
-      if (!profileData) {
-        setError("User profile not found")
-        setLoading(false)
-        return
-      }
-
-      setProfile(profileData)
-
-      const { data: topicsData, error: topicsErr } = await supabase
-        .from('topics')
-        .select(`
-          id,
-          title,
-          slug,
-          public_posts (
-            id,
-            moderation_status,
-            confidence_rating
-          )
-        `)
-        .eq('user_id', profileData.id)
-        .eq('public_posts.moderation_status', 'approved')
-
-      if (topicsErr) throw topicsErr
 
 function MiniSparkline({ posts }) {
   if (!posts || posts.length < 2) return null
@@ -101,6 +46,102 @@ function MiniSparkline({ posts }) {
   )
 }
 
+export default function Profile() {
+  const { username } = useParams()
+  const navigate = useNavigate()
+  const { profile: currentProfile, user } = useAuth()
+  
+  const [profile, setProfile] = useState(null)
+  const [topics, setTopics] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [nudgedTopicIds, setNudgedTopicIds] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('tl_nudged_topics') || '[]')
+    } catch (_) {
+      return []
+    }
+  })
+
+  // Pagination state for scalability
+  const [page, setPage] = useState(0)
+  const [hasMoreTopics, setHasMoreTopics] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const TOPICS_PAGE_SIZE = 10
+
+  const isSelf = currentProfile && currentProfile.username === username
+
+  useEffect(() => {
+    setPage(0)
+    fetchProfileAndTopics(0, true)
+  }, [username])
+
+  async function fetchProfileAndTopics(pageNum = 0, isInitial = false) {
+    try {
+      if (isInitial) {
+        setLoading(true)
+        setError("")
+      } else {
+        setLoadingMore(true)
+      }
+
+      let activeProfile = profile
+      if (isInitial || !activeProfile) {
+        const { data: profileData, error: profileErr } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('username', username)
+          .maybeSingle()
+
+        if (profileErr) throw profileErr
+        if (!profileData) {
+          setError("User profile not found")
+          setLoading(false)
+          return
+        }
+
+        setProfile(profileData)
+        activeProfile = profileData
+      }
+
+      // Check DB for existing user nudges if authenticated
+      if (user && isInitial) {
+        const { data: userNudges } = await supabase
+          .from('nudges')
+          .select('topic_id')
+          .eq('nudger_id', user.id)
+
+        if (userNudges) {
+          const dbNudged = userNudges.map(n => n.topic_id)
+          setNudgedTopicIds(prev => {
+            const combined = Array.from(new Set([...prev, ...dbNudged]))
+            localStorage.setItem('tl_nudged_topics', JSON.stringify(combined))
+            return combined
+          })
+        }
+      }
+
+      const from = pageNum * TOPICS_PAGE_SIZE
+      const to = from + TOPICS_PAGE_SIZE - 1
+
+      const { data: topicsData, error: topicsErr } = await supabase
+        .from('topics')
+        .select(`
+          id,
+          title,
+          slug,
+          public_posts (
+            id,
+            moderation_status,
+            confidence_rating
+          )
+        `)
+        .eq('user_id', activeProfile.id)
+        .eq('public_posts.moderation_status', 'approved')
+        .range(from, to)
+
+      if (topicsErr) throw topicsErr
+
       const filteredTopics = (topicsData || [])
         .filter(t => t.public_posts && t.public_posts.length > 0)
         .map(t => {
@@ -114,13 +155,27 @@ function MiniSparkline({ posts }) {
           }
         })
 
-      setTopics(filteredTopics)
+      if (isInitial) {
+        setTopics(filteredTopics)
+      } else {
+        setTopics(prev => [...prev, ...filteredTopics])
+      }
+
+      setHasMoreTopics(topicsData && topicsData.length === TOPICS_PAGE_SIZE)
     } catch (err) {
       console.error('Error loading profile page:', err)
       setError("An error occurred loading the profile.")
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
+  }
+
+  function loadMoreTopics() {
+    if (loadingMore || !hasMoreTopics) return
+    const nextPage = page + 1
+    setPage(nextPage)
+    fetchProfileAndTopics(nextPage, false)
   }
 
   async function sendNudge(topicId) {
@@ -136,7 +191,12 @@ function MiniSparkline({ posts }) {
           nudger_id: user.id
         })
       if (!error || error.code === '23505') {
-        setNudgedTopicId(topicId)
+        setNudgedTopicIds(prev => {
+          if (prev.includes(topicId)) return prev
+          const updated = [...prev, topicId]
+          localStorage.setItem('tl_nudged_topics', JSON.stringify(updated))
+          return updated
+        })
       } else {
         console.error('Nudge error:', error)
       }
@@ -329,20 +389,20 @@ function MiniSparkline({ posts }) {
                   {!isSelf && (
                     <button
                       onClick={() => sendNudge(t.id)}
-                      disabled={nudgedTopicId === t.id}
+                      disabled={nudgedTopicIds.includes(t.id)}
                       className="tl-focus btn-premium flex items-center gap-1"
                       style={{
                         padding: "6px 10px",
                         borderRadius: 8,
                         border: `1px solid ${tokens.line}`,
-                        background: nudgedTopicId === t.id ? tokens.pineSoft : tokens.emberSoft,
-                        color: nudgedTopicId === t.id ? tokens.pine : tokens.ember,
+                        background: nudgedTopicIds.includes(t.id) ? tokens.pineSoft : tokens.emberSoft,
+                        color: nudgedTopicIds.includes(t.id) ? tokens.pine : tokens.ember,
                         fontSize: 11,
                         fontWeight: 600,
-                        cursor: nudgedTopicId === t.id ? "default" : "pointer"
+                        cursor: nudgedTopicIds.includes(t.id) ? "default" : "pointer"
                       }}
                     >
-                      <Bell size={12} /> {nudgedTopicId === t.id ? "Nudge sent!" : "Nudge"}
+                      <Bell size={12} /> {nudgedTopicIds.includes(t.id) ? "Nudge sent!" : "Nudge"}
                     </button>
                   )}
 
@@ -356,6 +416,30 @@ function MiniSparkline({ posts }) {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Load More Pagination */}
+        {hasMoreTopics && topics.length > 0 && (
+          <div style={{ textAlign: "center", marginTop: 24 }}>
+            <button 
+              onClick={loadMoreTopics}
+              disabled={loadingMore}
+              className="tl-focus btn-premium flex items-center justify-center gap-1"
+              style={{ 
+                margin: "0 auto", 
+                padding: "9px 18px", 
+                borderRadius: 8, 
+                border: `1px solid ${tokens.line}`, 
+                background: tokens.card, 
+                color: tokens.ink, 
+                fontSize: 12.5, 
+                fontWeight: 500, 
+                cursor: loadingMore ? "not-allowed" : "pointer" 
+              }}
+            >
+              <ChevronDown size={14} /> {loadingMore ? "Loading earlier throughlines..." : "Load more throughlines"}
+            </button>
           </div>
         )}
       </div>

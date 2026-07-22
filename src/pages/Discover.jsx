@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../services/supabaseClient'
 import { ArrowUpRight, Compass, Search, Bookmark, Share2, Sparkles, SlidersHorizontal, Activity } from 'lucide-react'
@@ -51,7 +51,7 @@ export default function Discover() {
   const FEED_PAGE_SIZE = 12
 
   useEffect(() => {
-    fetchDiscoverFeed(0, true)
+    fetchDiscoverFeed(0, true, searchQuery)
 
     // Real-Time WebSocket Listener for live public posts
     const channel = supabase
@@ -70,6 +70,15 @@ export default function Discover() {
       supabase.removeChannel(channel)
     }
   }, [])
+
+  // Server-side debounced search query trigger
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFeedPage(0)
+      fetchDiscoverFeed(0, true, searchQuery)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
 
   function triggerToast(msg) {
     setToastMsg(msg)
@@ -96,16 +105,20 @@ export default function Discover() {
     triggerToast("Link & snippet copied to clipboard!")
   }
 
-  async function fetchDiscoverFeed(pageNum = 0, isInitial = false) {
+  async function fetchDiscoverFeed(pageNum = 0, isInitial = false, query = searchQuery) {
     try {
+      const cleanQuery = (query || '').trim()
+
       if (isInitial) {
         setLoading(true)
-        const cacheKey = `discover_feed_${pageNum}`
-        const cached = await getCache(cacheKey)
-        if (cached && Array.isArray(cached) && cached.length > 0) {
-          setTopics(cached)
-          setLoading(false)
-          return
+        if (!cleanQuery) {
+          const cacheKey = `discover_feed_${pageNum}`
+          const cached = await getCache(cacheKey)
+          if (cached && Array.isArray(cached) && cached.length > 0) {
+            setTopics(cached)
+            setLoading(false)
+            return
+          }
         }
       } else {
         setLoadingMoreFeed(true)
@@ -114,19 +127,20 @@ export default function Discover() {
       const from = pageNum * FEED_PAGE_SIZE
       const to = from + FEED_PAGE_SIZE - 1
 
-      const { data, error } = await supabase
+      let req = supabase
         .from('topics')
         .select(`
           id,
           title,
           slug,
           user_id,
+          created_at,
           profiles (
             username,
             display_name,
             bio
           ),
-          public_posts (
+          public_posts!inner (
             id,
             content,
             confidence_rating,
@@ -135,7 +149,15 @@ export default function Discover() {
           )
         `)
         .eq('public_posts.moderation_status', 'approved')
-        .range(from, to)
+        .order('created_at', { ascending: false })
+        .order('entry_date', { foreignTable: 'public_posts', ascending: true })
+        .limit(50, { foreignTable: 'public_posts' })
+
+      if (cleanQuery) {
+        req = req.or(`title.ilike.%${cleanQuery}%,public_posts.content.ilike.%${cleanQuery}%`)
+      }
+
+      const { data, error } = await req.range(from, to)
 
       if (error) throw error
 
@@ -151,7 +173,7 @@ export default function Discover() {
           const delta = Math.abs(latestConfidence - firstConfidence)
           
           // Time decay in days since latest post
-          const lastDate = new Date(latestPost.entry_date)
+          const lastDate = new Date(latestPost?.entry_date || new Date())
           const now = new Date()
           const daysAgo = Math.max(0, (now.getTime() - lastDate.getTime()) / (1000 * 3600 * 24))
           const decay = 1 / Math.pow(1 + daysAgo, 0.75)
@@ -182,7 +204,9 @@ export default function Discover() {
 
       if (isInitial) {
         setTopics(filtered)
-        setCache(`discover_feed_${pageNum}`, filtered, 60)
+        if (!cleanQuery) {
+          setCache(`discover_feed_${pageNum}`, filtered, 60)
+        }
       } else {
         setTopics(prev => [...prev, ...filtered])
       }
@@ -200,37 +224,43 @@ export default function Discover() {
     if (loadingMoreFeed || !hasMoreFeed) return
     const nextPage = feedPage + 1
     setFeedPage(nextPage)
-    fetchDiscoverFeed(nextPage, false)
+    fetchDiscoverFeed(nextPage, false, searchQuery)
   }
 
   // 1. Filter feed by tab
-  const tabFiltered = topics.filter(t => {
-    if (feedTab === "bookmarked" && !bookmarks.includes(t.id)) return false
-    return true
-  })
+  const tabFiltered = useMemo(() => {
+    return topics.filter(t => {
+      if (feedTab === "bookmarked" && !bookmarks.includes(t.id)) return false
+      return true
+    })
+  }, [topics, feedTab, bookmarks])
 
   // 2. Perform semantic & fuzzy search
-  const filteredFeed = searchFeed(tabFiltered, searchQuery)
+  const filteredFeed = useMemo(() => {
+    return searchFeed(tabFiltered, searchQuery)
+  }, [tabFiltered, searchQuery])
 
-  // 2. Sort feed using selected algorithm mode
-  const sortedFeed = [...filteredFeed].sort((a, b) => {
-    if (algoMode === "smart") {
-      return b.score - a.score
-    }
-    if (algoMode === "evolved") {
-      return b.delta - a.delta || b.public_posts.length - a.public_posts.length
-    }
-    if (algoMode === "recent") {
-      return new Date(b.latestPost.entry_date) - new Date(a.latestPost.entry_date)
-    }
-    if (algoMode === "conviction") {
-      return b.latestConfidence - a.latestConfidence
-    }
-    if (algoMode === "questioning") {
-      return a.latestConfidence - b.latestConfidence
-    }
-    return 0
-  })
+  // 3. Sort feed using selected algorithm mode
+  const sortedFeed = useMemo(() => {
+    return [...filteredFeed].sort((a, b) => {
+      if (algoMode === "smart") {
+        return b.score - a.score
+      }
+      if (algoMode === "evolved") {
+        return b.delta - a.delta || b.public_posts.length - a.public_posts.length
+      }
+      if (algoMode === "recent") {
+        return new Date(b.latestPost.entry_date) - new Date(a.latestPost.entry_date)
+      }
+      if (algoMode === "conviction") {
+        return b.latestConfidence - a.latestConfidence
+      }
+      if (algoMode === "questioning") {
+        return a.latestConfidence - b.latestConfidence
+      }
+      return 0
+    })
+  }, [filteredFeed, algoMode])
 
   return (
     <div className="tl-scroll" style={{ flex: 1, overflowY: "auto", maxHeight: "calc(100vh - 58px)" }}>

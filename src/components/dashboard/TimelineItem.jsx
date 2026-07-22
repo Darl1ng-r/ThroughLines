@@ -1,6 +1,6 @@
-import React, { memo } from 'react'
+import React, { memo, useState } from 'react'
 import MarkdownText from '../MarkdownText'
-import { Lock, Globe, AlertCircle } from 'lucide-react'
+import { Lock, Globe, AlertCircle, Edit3, Check, X } from 'lucide-react'
 
 const tokens = {
   paper: "var(--color-paper)",
@@ -56,9 +56,14 @@ function VisibilityStatus({ visibility, status }) {
   )
 }
 
-const TimelineItem = memo(function TimelineItem({ entry, isSelected, onPublish, onUnpublish }) {
+const TimelineItem = memo(function TimelineItem({ entry, isSelected, onPublish, onUnpublish, onUpdate }) {
   const isPublic = entry.public_posts && entry.public_posts.length > 0
   const status = isPublic ? entry.public_posts[0].moderation_status : null
+
+  const [isEditing, setIsEditing] = useState(false)
+  const [editContent, setEditContent] = useState(entry.content)
+  const [editConfidence, setEditConfidence] = useState(entry.confidence_rating)
+  const [saving, setSaving] = useState(false)
 
   let formattedDate = entry.entry_date
   try {
@@ -67,6 +72,21 @@ const TimelineItem = memo(function TimelineItem({ entry, isSelected, onPublish, 
       formattedDate = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     }
   } catch (_) {}
+
+  async function handleSaveEdit() {
+    if (!editContent.trim() || saving) return
+    try {
+      setSaving(true)
+      if (onUpdate) {
+        await onUpdate(entry.id, editContent.trim(), Number(editConfidence))
+      }
+      setIsEditing(false)
+    } catch (err) {
+      console.error('Save edit error:', err)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div id={`entry-${entry.id}`} className="tl-entry flex gap-4" style={{ position: "relative" }}>
@@ -97,32 +117,101 @@ const TimelineItem = memo(function TimelineItem({ entry, isSelected, onPublish, 
             <span className="tl-mono" style={{ fontSize: 12, color: tokens.inkFaint }}>
               {formattedDate}
             </span>
-            <Meter value={entry.confidence_rating} />
+            <Meter value={isEditing ? editConfidence : entry.confidence_rating} />
           </div>
-          <VisibilityStatus visibility={isPublic ? 'public' : 'private'} status={status} />
+          <div className="flex items-center gap-2">
+            {!isEditing && (
+              <button
+                onClick={() => { setEditContent(entry.content); setEditConfidence(entry.confidence_rating); setIsEditing(true); }}
+                className="tl-focus flex items-center gap-1 btn-premium"
+                style={{ border: "none", background: "none", cursor: "pointer", color: tokens.inkSoft, fontSize: 11, fontWeight: 500, padding: 0 }}
+                title="Edit entry"
+              >
+                <Edit3 size={12} /> Edit
+              </button>
+            )}
+            <VisibilityStatus visibility={isPublic ? 'public' : 'private'} status={status} />
+          </div>
         </div>
         
-        <div style={{ fontSize: 14.5, color: tokens.ink, marginBottom: 10 }}>
-          <MarkdownText content={entry.content} />
-        </div>
+        {isEditing ? (
+          <div className="flex flex-col gap-3" style={{ margin: "10px 0" }}>
+            <textarea
+              value={editContent}
+              onChange={(e) => setEditContent(e.target.value)}
+              rows={3}
+              className="tl-focus tl-input"
+              style={{
+                width: "100%",
+                padding: "8px 10px",
+                borderRadius: 8,
+                border: `1px solid ${tokens.line}`,
+                background: tokens.paper,
+                fontSize: 14,
+                fontFamily: "inherit",
+                color: tokens.ink,
+                resize: "vertical"
+              }}
+            />
+
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkSoft }}>Confidence: {editConfidence}%</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={editConfidence}
+                  onChange={(e) => setEditConfidence(Number(e.target.value))}
+                  style={{ width: 100, accentColor: tokens.pine, cursor: "pointer" }}
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsEditing(false)}
+                  disabled={saving}
+                  className="tl-focus flex items-center gap-1 btn-premium"
+                  style={{ border: `1px solid ${tokens.line}`, background: "transparent", borderRadius: 6, padding: "4px 10px", fontSize: 12, cursor: "pointer", color: tokens.inkSoft }}
+                >
+                  <X size={12} /> Cancel
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={saving || !editContent.trim()}
+                  className="tl-focus flex items-center gap-1 btn-premium"
+                  style={{ border: "none", background: tokens.pine, color: tokens.paper, borderRadius: 6, padding: "4px 10px", fontSize: 12, fontWeight: 500, cursor: saving ? "not-allowed" : "pointer" }}
+                >
+                  <Check size={12} /> {saving ? "Saving..." : "Save"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: 14.5, color: tokens.ink, marginBottom: 10 }}>
+            <MarkdownText content={entry.content} />
+          </div>
+        )}
         
         {/* Publish/Unpublish Action */}
-        {!isPublic ? (
-          <button 
-            onClick={() => onPublish(entry)} 
-            className="tl-focus flex items-center gap-1 btn-premium" 
-            style={{ border: "none", background: "none", cursor: "pointer", color: tokens.pine, fontSize: 12, fontWeight: 500, padding: 0 }}
-          >
-            <Globe size={12} /> Publish this entry
-          </button>
-        ) : (
-          <button 
-            onClick={() => onUnpublish(entry)} 
-            className="tl-focus flex items-center gap-1 btn-premium" 
-            style={{ border: "none", background: "none", cursor: "pointer", color: tokens.inkSoft, fontSize: 12, fontWeight: 500, padding: 0 }}
-          >
-            <Lock size={12} /> Make private
-          </button>
+        {!isEditing && (
+          !isPublic ? (
+            <button 
+              onClick={() => onPublish(entry)} 
+              className="tl-focus flex items-center gap-1 btn-premium" 
+              style={{ border: "none", background: "none", cursor: "pointer", color: tokens.pine, fontSize: 12, fontWeight: 500, padding: 0 }}
+            >
+              <Globe size={12} /> Publish this entry
+            </button>
+          ) : (
+            <button 
+              onClick={() => onUnpublish(entry)} 
+              className="tl-focus flex items-center gap-1 btn-premium" 
+              style={{ border: "none", background: "none", cursor: "pointer", color: tokens.inkSoft, fontSize: 12, fontWeight: 500, padding: 0 }}
+            >
+              <Lock size={12} /> Make private
+            </button>
+          )
         )}
       </div>
     </div>

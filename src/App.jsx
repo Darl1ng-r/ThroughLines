@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Link, useNavigate, useLocation 
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { Compass, LogOut, Settings as SettingsIcon, ChevronDown, User as UserIcon, Moon, Sun } from 'lucide-react'
 
+import ProtectedRoute from './components/ProtectedRoute'
+
 // Route-level Code Splitting for performance and small initial bundle size
 const Landing = lazy(() => import('./pages/Landing'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -254,9 +256,17 @@ function MainLayout() {
       }>
         <Routes>
           <Route path="/" element={<Landing />} />
-          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/dashboard" element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          } />
           <Route path="/discover" element={<Discover />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/settings" element={
+            <ProtectedRoute>
+              <Settings />
+            </ProtectedRoute>
+          } />
           <Route path="/:username" element={<Profile />} />
           <Route path="/:username/:topicSlug" element={<TopicDetail />} />
         </Routes>

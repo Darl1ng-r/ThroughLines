@@ -6,10 +6,7 @@ import MarkdownText from '../components/MarkdownText'
 import { generatePerspectiveSynthesis } from '../services/aiSynthesisService'
 import { getDraft, saveDraft, removeDraft } from '../services/draftStorage'
 import { publishEvent, EVENTS } from '../services/eventBusService'
-import '../services/backgroundWorker'
-import TopicSidebar from '../components/dashboard/TopicSidebar'
-import EntryComposer from '../components/dashboard/EntryComposer'
-import TimelineItem from '../components/dashboard/TimelineItem'
+import { sendNativeNotification, requestNotificationPermission } from '../services/notificationService'
 import { 
   Lock, 
   Globe, 
@@ -190,6 +187,9 @@ export default function Dashboard() {
   useEffect(() => {
     if (!user) return
 
+    // Prompt for browser notification permission
+    requestNotificationPermission()
+
     const channel = supabase
       .channel('dashboard_nudges_ws')
       .on(
@@ -200,6 +200,10 @@ export default function Dashboard() {
           if (newNudge && newNudge.topic_id) {
             setNudges(prev => [...prev, newNudge])
             triggerToast("🔔 Someone just nudged you for an update!")
+            sendNativeNotification("🌿 New Throughline Nudge!", {
+              body: "Someone requested an update on your throughline!",
+              url: "/dashboard"
+            })
           }
         }
       )
@@ -347,6 +351,51 @@ export default function Dashboard() {
     }
   }
 
+  async function renameTopic(topicId, newTitle) {
+    try {
+      const slug = newTitle
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '') || 'throughline'
+
+      const { error } = await supabase
+        .from('topics')
+        .update({ title: newTitle, slug })
+        .eq('id', topicId)
+        .eq('user_id', user.id)
+
+      if (error) throw error
+
+      setTopics(prev => prev.map(t => t.id === topicId ? { ...t, title: newTitle, slug } : t))
+      triggerToast("Throughline renamed!")
+    } catch (err) {
+      console.error('Error renaming topic:', err)
+      triggerToast("Failed to rename throughline.")
+    }
+  }
+
+  async function deleteTopic(topicId) {
+    try {
+      const { error } = await supabase
+        .from('topics')
+        .delete()
+        .eq('id', topicId)
+        .eq('user_id', user.id)
+
+      if (error) throw error
+
+      const remaining = topics.filter(t => t.id !== topicId)
+      setTopics(remaining)
+      if (selectedId === topicId) {
+        setSelectedId(remaining.length > 0 ? remaining[0].id : null)
+      }
+      triggerToast("Throughline deleted.")
+    } catch (err) {
+      console.error('Error deleting topic:', err)
+      triggerToast("Failed to delete throughline.")
+    }
+  }
+
   async function addEntry() {
     const text = composeText.trim()
     if (!text || !selectedTopic || submitting) return
@@ -480,6 +529,65 @@ export default function Dashboard() {
     }
   }
 
+  async function updateEntry(entryId, updatedContent, updatedConfidence) {
+    try {
+      const { error: privErr } = await supabase
+        .from('private_entries')
+        .update({
+          content: updatedContent,
+          confidence_rating: updatedConfidence
+        })
+        .eq('id', entryId)
+        .eq('user_id', user.id)
+
+      if (privErr) throw privErr
+
+      const targetEntry = entries.find(e => e.id === entryId)
+      let updatedPubPosts = []
+
+      if (targetEntry && targetEntry.public_posts && targetEntry.public_posts.length > 0) {
+        const publicPostId = targetEntry.public_posts[0].id
+        const { data: pubData, error: pubErr } = await supabase
+          .from('public_posts')
+          .update({
+            content: updatedContent,
+            confidence_rating: updatedConfidence,
+            moderation_status: 'pending'
+          })
+          .eq('private_entry_id', entryId)
+          .eq('user_id', user.id)
+          .select()
+
+        if (pubErr) throw pubErr
+        if (pubData && pubData[0]) {
+          updatedPubPosts = [pubData[0]]
+          publishEvent(EVENTS.PUBLIC_POST_PUBLISHED, {
+            postId: publicPostId,
+            topicId: selectedTopic.id,
+            content: updatedContent
+          })
+        }
+      }
+
+      setEntries(prev => prev.map(e => {
+        if (e.id === entryId) {
+          return {
+            ...e,
+            content: updatedContent,
+            confidence_rating: updatedConfidence,
+            public_posts: e.public_posts && e.public_posts.length > 0 ? updatedPubPosts : []
+          }
+        }
+        return e
+      }))
+
+      triggerToast("Entry updated successfully!")
+    } catch (err) {
+      console.error('Error updating entry:', err)
+      triggerToast("Failed to update entry.")
+    }
+  }
+
   return (
     <div className="flex flex-col md:flex-row flex-1" style={{ minHeight: 0 }}>
       <TopicSidebar 
@@ -493,6 +601,8 @@ export default function Dashboard() {
         setNewTopicTitle={setNewTopicTitle}
         onCreateTopic={createTopic}
         loadingTopics={loadingTopics}
+        onRenameTopic={renameTopic}
+        onDeleteTopic={deleteTopic}
       />
 
       {/* Main Workspace - Entries and Line Graph */}
@@ -710,6 +820,7 @@ export default function Dashboard() {
                       isSelected={selectedEntryId === entry.id}
                       onPublish={publishEntry}
                       onUnpublish={unpublishEntry}
+                      onUpdate={updateEntry}
                     />
                   ))
                 )}
