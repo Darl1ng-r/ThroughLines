@@ -142,6 +142,10 @@ export default function TopicDetail() {
 
   async function handleNudge() {
     if (!topic || nudgeCooldown > 0) return
+    if (!user || !currentProfile) {
+      navigate('/')
+      return
+    }
     try {
       const key = `nudge_cooldown_${topic.id}`
       sessionStorage.setItem(key, String(Date.now()))
@@ -151,10 +155,17 @@ export default function TopicDetail() {
         .from('nudges')
         .insert({
           topic_id: topic.id,
-          nudger_id: currentProfile?.id || null
+          nudger_id: currentProfile.id
         })
-      if (error) throw error
-      setToastMsg(`Nudge sent to @${username} for an update!`)
+      if (error) {
+        if (error.code === '23505') { // Unique constraint violation
+          setToastMsg("You have already nudged this topic!")
+        } else {
+          throw error
+        }
+      } else {
+        setToastMsg(`Nudge sent to @${username} for an update!`)
+      }
     } catch (err) {
       console.error('Error sending nudge:', err)
       setToastMsg("Could not send nudge. Please try again.")

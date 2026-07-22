@@ -52,8 +52,9 @@ CREATE TABLE IF NOT EXISTS public.public_posts (
 CREATE TABLE IF NOT EXISTS public.nudges (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     topic_id UUID NOT NULL REFERENCES public.topics(id) ON DELETE CASCADE,
-    nudger_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    nudger_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT unique_topic_nudger UNIQUE (topic_id, nudger_id)
 );
 
 -- Production Performance Indexes
@@ -96,7 +97,11 @@ CREATE POLICY "Users can insert own public posts" ON public.public_posts FOR INS
 CREATE POLICY "Topic owners can view nudges" ON public.nudges FOR SELECT USING (
     EXISTS (SELECT 1 FROM public.topics WHERE topics.id = nudges.topic_id AND topics.user_id = auth.uid())
 );
-CREATE POLICY "Everyone can nudge a topic" ON public.nudges FOR INSERT WITH CHECK (true);
+CREATE POLICY "Authenticated users can nudge topics of others once" ON public.nudges FOR INSERT WITH CHECK (
+    auth.uid() IS NOT NULL AND 
+    nudger_id = auth.uid() AND 
+    EXISTS (SELECT 1 FROM public.topics WHERE topics.id = topic_id AND topics.user_id != auth.uid())
+);
 
 -- Enable Supabase Realtime WebSockets for Nudges and Public Posts
 ALTER PUBLICATION supabase_realtime ADD TABLE public.nudges;

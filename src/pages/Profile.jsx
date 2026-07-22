@@ -133,10 +133,12 @@ function MiniSparkline({ posts }) {
         .from('nudges')
         .insert({
           topic_id: topicId,
-          nudger_user_id: user.id
+          nudger_id: user.id
         })
-      if (!error) {
+      if (!error || error.code === '23505') {
         setNudgedTopicId(topicId)
+      } else {
+        console.error('Nudge error:', error)
       }
     } catch (err) {
       console.error('Nudge error:', err)

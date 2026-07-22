@@ -106,71 +106,23 @@ export function AuthProvider({ children }) {
   }
 
   async function signInWithGoogle() {
-    try {
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/dashboard`
-        }
-      })
-      if (error) throw error
-      return data
-    } catch (err) {
-      console.warn("Google OAuth error:", err.message)
-      // Fallback if Google OAuth provider is not enabled in Supabase settings
-      if (
-        err.message?.includes("provider is not enabled") || 
-        err.message?.includes("Unsupported provider") ||
-        err.message?.includes("validation_failed") ||
-        err.status === 400
-      ) {
-        const demoEmail = "google.demo@throughline.app"
-        const demoPass = "ThroughLineDemo2026!"
-        try {
-          const res = await supabase.auth.signInWithPassword({ email: demoEmail, password: demoPass })
-          if (res.error) throw res.error
-          return res.data
-        } catch (_) {
-          await supabase.auth.signUp({
-            email: demoEmail,
-            password: demoPass,
-            options: { data: { username: "google_thinker", display_name: "Google Explorer" } }
-          })
-          const res = await supabase.auth.signInWithPassword({ email: demoEmail, password: demoPass })
-          return res.data
-        }
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/dashboard`
       }
-      throw err
-    }
+    })
+    if (error) throw error
+    return data
   }
 
   async function signInWithGoogleCredential(idToken) {
-    try {
-      const { data, error } = await supabase.auth.signInWithIdToken({
-        provider: 'google',
-        token: idToken
-      })
-      if (error) throw error
-      return data
-    } catch (err) {
-      console.warn("ID Token Sign-in error:", err)
-      // Fallback for demo mode
-      const demoEmail = "google.demo@throughline.app"
-      const demoPass = "ThroughLineDemo2026!"
-      try {
-        const res = await supabase.auth.signInWithPassword({ email: demoEmail, password: demoPass })
-        if (res.error) throw res.error
-        return res.data
-      } catch (_) {
-        await supabase.auth.signUp({
-          email: demoEmail,
-          password: demoPass,
-          options: { data: { username: "google_thinker", display_name: "Google Explorer" } }
-        })
-        const res = await supabase.auth.signInWithPassword({ email: demoEmail, password: demoPass })
-        return res.data
-      }
-    }
+    const { data, error } = await supabase.auth.signInWithIdToken({
+      provider: 'google',
+      token: idToken
+    })
+    if (error) throw error
+    return data
   }
 
   async function updateProfile(updates) {

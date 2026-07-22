@@ -114,19 +114,19 @@ export interface Database {
         Row: {
           id: string
           topic_id: string
-          nudger_id: string | null
+          nudger_id: string
           created_at: string
         }
         Insert: {
           id?: string
           topic_id: string
-          nudger_id?: string | null
+          nudger_id: string
           created_at?: string
         }
         Update: {
           id?: string
           topic_id?: string
-          nudger_id?: string | null
+          nudger_id?: string
           created_at?: string
         }
       }
