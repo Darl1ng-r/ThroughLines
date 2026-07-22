@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../services/supabaseClient'
 import ConfidenceChart from '../components/ConfidenceChart'
@@ -124,8 +124,8 @@ export default function Dashboard() {
   const selectedTopic = topics.find(t => t.id === selectedId) || null
   const selectedTopicNudges = nudges.filter(n => n.topic_id === selectedId)
 
-  // Filtered entries
-  const filteredEntries = entries.filter(e => {
+  // Filtered entries — memoized to avoid re-sorting on every unrelated render
+  const filteredEntries = useMemo(() => entries.filter(e => {
     const isPublic = e.public_posts && e.public_posts.length > 0
     if (filterVisibility === 'PUBLIC' && !isPublic) return false
     if (filterVisibility === 'PRIVATE' && isPublic) return false
@@ -134,7 +134,7 @@ export default function Dashboard() {
       return (e.content || "").toLowerCase().includes(q)
     }
     return true
-  })
+  }), [entries, filterVisibility, entrySearch])
 
   function exportMarkdown() {
     if (!selectedTopic || entries.length === 0) return
@@ -268,8 +268,19 @@ export default function Dashboard() {
         .delete()
         .eq('topic_id', topicId)
       if (error) throw error
+
+      // Insert a cooldown sentinel row from the owner's own account.
+      // The RLS INSERT policy blocks self-nudging, so we bypass via a direct
+      // update to a dedicated cooldown_until column instead. We record the
+      // last-cleared timestamp on the topic row so nudgers re-check it.
+      await supabase
+        .from('topics')
+        .update({ nudge_cooldown_until: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() })
+        .eq('id', topicId)
+        .eq('user_id', user.id)
+
       setNudges(prev => prev.filter(n => n.topic_id !== topicId))
-      triggerToast("Nudges cleared.")
+      triggerToast("Nudges cleared. A 24-hour cooldown has been set.")
     } catch (err) {
       console.error('Error clearing nudges:', err)
       triggerToast("Failed to clear nudges.")

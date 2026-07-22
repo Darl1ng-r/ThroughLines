@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS public.topics (
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     title TEXT NOT NULL CHECK (char_length(title) >= 1 AND char_length(title) <= 200),
     slug TEXT NOT NULL,
+    nudge_cooldown_until TIMESTAMPTZ DEFAULT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT unique_user_slug UNIQUE (user_id, slug)
 );
@@ -66,13 +67,23 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
+-- Schedule TTL cleanup via pg_cron (runs daily at 03:00 UTC)
+-- Requires the pg_cron extension; enable it in the Supabase dashboard under Database > Extensions
+SELECT cron.schedule(
+    'nudges-ttl-cleanup',        -- job name (idempotent)
+    '0 3 * * *',                 -- cron expression: daily at 03:00 UTC
+    $$SELECT public.cleanup_old_nudges();$$
+);
+
 -- Production Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_profiles_username ON public.profiles (username);
 CREATE INDEX IF NOT EXISTS idx_topics_user_id ON public.topics (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_topics_slug ON public.topics (slug);
+CREATE INDEX IF NOT EXISTS idx_topics_created_at ON public.topics (created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_private_entries_topic_date ON public.private_entries (topic_id, entry_date DESC);
 CREATE INDEX IF NOT EXISTS idx_public_posts_feed ON public.public_posts (moderation_status, entry_date DESC);
 CREATE INDEX IF NOT EXISTS idx_nudges_topic_id ON public.nudges (topic_id);
+CREATE INDEX IF NOT EXISTS idx_nudges_created_at ON public.nudges (created_at);
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
@@ -115,7 +126,12 @@ CREATE POLICY "Topic owners can view nudges" ON public.nudges FOR SELECT USING (
 CREATE POLICY "Authenticated users can nudge topics of others once" ON public.nudges FOR INSERT WITH CHECK (
     auth.uid() IS NOT NULL AND 
     nudger_id = auth.uid() AND 
-    EXISTS (SELECT 1 FROM public.topics WHERE topics.id = topic_id AND topics.user_id != auth.uid())
+    EXISTS (
+        SELECT 1 FROM public.topics
+        WHERE topics.id = topic_id
+          AND topics.user_id != auth.uid()
+          AND (topics.nudge_cooldown_until IS NULL OR topics.nudge_cooldown_until < NOW())
+    )
 );
 CREATE POLICY "Topic owners can delete nudges" ON public.nudges FOR DELETE USING (
     EXISTS (SELECT 1 FROM public.topics WHERE topics.id = nudges.topic_id AND topics.user_id = auth.uid())

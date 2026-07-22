@@ -43,15 +43,15 @@ export default function Discover() {
     }
   }, [topics])
 
-  // Feed pagination & real-time updates state
-  const [feedPage, setFeedPage] = useState(0)
+  // Cursor-based pagination state
+  const [lastCursor, setLastCursor] = useState(null)  // created_at of last fetched topic
   const [hasMoreFeed, setHasMoreFeed] = useState(true)
   const [loadingMoreFeed, setLoadingMoreFeed] = useState(false)
   const [newUpdatesCount, setNewUpdatesCount] = useState(0)
   const FEED_PAGE_SIZE = 12
 
   useEffect(() => {
-    fetchDiscoverFeed(0, true, searchQuery)
+    fetchDiscoverFeed(null, true, searchQuery)
 
     // Real-Time WebSocket Listener for live public posts
     const channel = supabase
@@ -60,7 +60,7 @@ export default function Discover() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'public_posts' },
         () => {
-          invalidateCache('discover_feed_0')
+          invalidateCache('discover_feed_cursor_null')
           setNewUpdatesCount(prev => prev + 1)
         }
       )
@@ -74,8 +74,8 @@ export default function Discover() {
   // Server-side debounced search query trigger
   useEffect(() => {
     const timer = setTimeout(() => {
-      setFeedPage(0)
-      fetchDiscoverFeed(0, true, searchQuery)
+      setLastCursor(null)
+      fetchDiscoverFeed(null, true, searchQuery)
     }, 300)
     return () => clearTimeout(timer)
   }, [searchQuery])
@@ -105,14 +105,14 @@ export default function Discover() {
     triggerToast("Link & snippet copied to clipboard!")
   }
 
-  async function fetchDiscoverFeed(pageNum = 0, isInitial = false, query = searchQuery) {
+  async function fetchDiscoverFeed(cursor = null, isInitial = false, query = searchQuery) {
     try {
       const cleanQuery = (query || '').trim()
 
       if (isInitial) {
         setLoading(true)
         if (!cleanQuery) {
-          const cacheKey = `discover_feed_${pageNum}`
+          const cacheKey = `discover_feed_cursor_${cursor || 'null'}`
           const cached = await getCache(cacheKey)
           if (cached && Array.isArray(cached) && cached.length > 0) {
             setTopics(cached)
@@ -123,9 +123,6 @@ export default function Discover() {
       } else {
         setLoadingMoreFeed(true)
       }
-
-      const from = pageNum * FEED_PAGE_SIZE
-      const to = from + FEED_PAGE_SIZE - 1
 
       let req = supabase
         .from('topics')
@@ -152,12 +149,18 @@ export default function Discover() {
         .order('created_at', { ascending: false })
         .order('entry_date', { foreignTable: 'public_posts', ascending: true })
         .limit(50, { foreignTable: 'public_posts' })
+        .limit(FEED_PAGE_SIZE)
+
+      // Cursor: only fetch topics older than the last seen created_at
+      if (cursor) {
+        req = req.lt('created_at', cursor)
+      }
 
       if (cleanQuery) {
         req = req.or(`title.ilike.%${cleanQuery}%,public_posts.content.ilike.%${cleanQuery}%`)
       }
 
-      const { data, error } = await req.range(from, to)
+      const { data, error } = await req
 
       if (error) throw error
 
@@ -205,12 +208,16 @@ export default function Discover() {
       if (isInitial) {
         setTopics(filtered)
         if (!cleanQuery) {
-          setCache(`discover_feed_${pageNum}`, filtered, 60)
+          setCache(`discover_feed_cursor_null`, filtered, 60)
         }
       } else {
         setTopics(prev => [...prev, ...filtered])
       }
 
+      // Advance cursor to the created_at of the last fetched topic
+      if (data && data.length > 0) {
+        setLastCursor(data[data.length - 1].created_at)
+      }
       setHasMoreFeed(data && data.length === FEED_PAGE_SIZE)
     } catch (err) {
       console.error('Error fetching discover feed:', err)
@@ -222,9 +229,7 @@ export default function Discover() {
 
   function loadMoreFeed() {
     if (loadingMoreFeed || !hasMoreFeed) return
-    const nextPage = feedPage + 1
-    setFeedPage(nextPage)
-    fetchDiscoverFeed(nextPage, false, searchQuery)
+    fetchDiscoverFeed(lastCursor, false, searchQuery)
   }
 
   // 1. Filter feed by tab

@@ -5,6 +5,9 @@
 
 import { subscribeEvent, EVENTS } from './eventBusService'
 import { generatePerspectiveSynthesis } from './aiSynthesisService'
+import { supabase } from './supabaseClient'
+import { invalidateCache } from './redisCacheService'
+import { sendNativeNotification } from './notificationService'
 
 const processedEvents = new Set()
 
@@ -28,9 +31,6 @@ async function handleEntryCreatedWorker(eventMessage) {
     console.error(`[Background Worker] Error computing AI synthesis for topic [${topicId}]:`, err)
   }
 }
-
-import { supabase } from './supabaseClient'
-import { invalidateCache } from './redisCacheService'
 
 /**
  * Worker Task 2: Asynchronous Content Moderation & Quality Scan
@@ -57,7 +57,7 @@ export async function handlePublicPostWorker(eventMessage) {
     }
 
     // 3. Invalidate Discover feed cache so updated status reflects immediately
-    await invalidateCache('discover_feed_0')
+    await invalidateCache('discover_feed_cursor_null')
 
     console.log(`[Background Worker] Moderation scan completed for post [${postId}]:`, {
       moderationStatus: newStatus
@@ -66,8 +66,6 @@ export async function handlePublicPostWorker(eventMessage) {
     console.error(`[Background Worker] Moderation scan error for post [${postId}]:`, err)
   }
 }
-
-import { sendNativeNotification } from './notificationService'
 
 /**
  * Worker Task 3: Asynchronous Push Notification Dispatcher
