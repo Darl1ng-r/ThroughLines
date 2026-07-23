@@ -6,6 +6,8 @@
 const memoryCache = new Map()
 const rateLimits = new Map()
 
+const isTestEnv = import.meta.env.MODE === 'test'
+const PROXY_CACHE_URL = !isTestEnv && (import.meta.env.VITE_REDIS_PROXY_URL || '/api/cache')
 const UPSTASH_URL = import.meta.env.VITE_UPSTASH_REDIS_REST_URL
 const UPSTASH_TOKEN = import.meta.env.VITE_UPSTASH_REDIS_REST_TOKEN
 
@@ -15,17 +17,22 @@ const UPSTASH_TOKEN = import.meta.env.VITE_UPSTASH_REDIS_REST_TOKEN
  * @returns {Promise<any|null>}
  */
 export async function getCache(key) {
-  if (UPSTASH_URL && UPSTASH_TOKEN) {
+  const targetUrl = UPSTASH_URL 
+    ? `${UPSTASH_URL}/get/${encodeURIComponent(key)}`
+    : `${PROXY_CACHE_URL}/get/${encodeURIComponent(key)}`
+
+  if (UPSTASH_URL || PROXY_CACHE_URL) {
     try {
-      const res = await fetch(`${UPSTASH_URL}/get/${encodeURIComponent(key)}`, {
-        headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` }
-      })
-      const data = await res.json()
-      if (data && data.result) {
-        return JSON.parse(data.result)
+      const headers = UPSTASH_TOKEN ? { Authorization: `Bearer ${UPSTASH_TOKEN}` } : {}
+      const res = await fetch(targetUrl, { headers })
+      if (res.ok) {
+        const data = await res.json()
+        if (data && data.result) {
+          return JSON.parse(data.result)
+        }
       }
     } catch (err) {
-      console.warn('Upstash Redis get error, falling back to memory cache:', err)
+      console.warn('Redis cache get error, falling back to memory cache:', err.message)
     }
   }
 
@@ -46,14 +53,17 @@ export async function getCache(key) {
  * @param {number} ttlSeconds 
  */
 export async function setCache(key, value, ttlSeconds = 60) {
-  if (UPSTASH_URL && UPSTASH_TOKEN) {
+  const jsonStr = JSON.stringify(value)
+  const targetUrl = UPSTASH_URL
+    ? `${UPSTASH_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(jsonStr)}/EX/${ttlSeconds}`
+    : `${PROXY_CACHE_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(jsonStr)}/EX/${ttlSeconds}`
+
+  if (UPSTASH_URL || PROXY_CACHE_URL) {
     try {
-      const jsonStr = JSON.stringify(value)
-      await fetch(`${UPSTASH_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(jsonStr)}/EX/${ttlSeconds}`, {
-        headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` }
-      })
+      const headers = UPSTASH_TOKEN ? { Authorization: `Bearer ${UPSTASH_TOKEN}` } : {}
+      await fetch(targetUrl, { headers })
     } catch (err) {
-      console.warn('Upstash Redis set error, using memory cache:', err)
+      console.warn('Redis cache set error, using memory cache:', err.message)
     }
   }
 
@@ -69,13 +79,16 @@ export async function setCache(key, value, ttlSeconds = 60) {
  * @param {string} key 
  */
 export async function invalidateCache(key) {
-  if (UPSTASH_URL && UPSTASH_TOKEN) {
+  const targetUrl = UPSTASH_URL
+    ? `${UPSTASH_URL}/del/${encodeURIComponent(key)}`
+    : `${PROXY_CACHE_URL}/del/${encodeURIComponent(key)}`
+
+  if (UPSTASH_URL || PROXY_CACHE_URL) {
     try {
-      await fetch(`${UPSTASH_URL}/del/${encodeURIComponent(key)}`, {
-        headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` }
-      })
+      const headers = UPSTASH_TOKEN ? { Authorization: `Bearer ${UPSTASH_TOKEN}` } : {}
+      await fetch(targetUrl, { headers })
     } catch (err) {
-      console.warn('Upstash Redis del error:', err)
+      console.warn('Redis cache del error:', err.message)
     }
   }
   memoryCache.delete(key)

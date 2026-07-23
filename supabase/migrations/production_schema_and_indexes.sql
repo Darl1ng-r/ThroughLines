@@ -58,6 +58,42 @@ CREATE TABLE IF NOT EXISTS public.nudges (
     CONSTRAINT unique_topic_nudger UNIQUE (topic_id, nudger_id)
 );
 
+-- 6. Automated Server-Side PostgreSQL Content Moderation Trigger
+-- Guarantees zero client-side bypass even when writing via direct REST API
+CREATE OR REPLACE FUNCTION public.moderate_public_post()
+RETURNS TRIGGER AS $$
+DECLARE
+    http_matches TEXT[];
+    http_count INT := 0;
+    is_spam BOOLEAN;
+BEGIN
+    -- Calculate link count
+    http_matches := REGEXP_MATCHES(NEW.content, 'https?://', 'gi');
+    IF http_matches IS NOT NULL THEN
+        http_count := ARRAY_LENGTH(http_matches, 1);
+    END IF;
+
+    -- Evaluate moderation rules inside PostgreSQL kernel
+    is_spam := (CHAR_LENGTH(NEW.content) > 4500) OR 
+               (http_count > 3) OR 
+               (NEW.content ~* '\b(casino|crypto-airdrop|free-followers|phishing)\b');
+
+    IF is_spam THEN
+        NEW.moderation_status := 'flagged';
+    ELSIF NEW.moderation_status IS NULL OR NEW.moderation_status = 'pending' THEN
+        NEW.moderation_status := 'approved';
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trigger_moderate_public_post ON public.public_posts;
+CREATE TRIGGER trigger_moderate_public_post
+    BEFORE INSERT OR UPDATE OF content ON public.public_posts
+    FOR EACH ROW
+    EXECUTE FUNCTION public.moderate_public_post();
+
 -- Automated TTL Cleanup Function for Nudges Table (removes nudges older than 30 days)
 CREATE OR REPLACE FUNCTION public.cleanup_old_nudges()
 RETURNS void AS $$
