@@ -3,8 +3,8 @@
   --color-paper-deep: #E8E3D5;
   --color-card: #FBF9F3;
   --color-ink: #211F1B;
-  --color-ink-soft: #6B6459;
-  --color-ink-faint: #9C9587;
+  --color-ink-soft: #5C564B;
+  --color-ink-faint: #605B52;
   --color-pine: #2F4A3D;
   --color-pine-soft: #E3E9E0;
   --color-plum: #4B3B5C;
@@ -25,7 +25,7 @@
   --color-card: #201E1B;
   --color-ink: #EAE5D9;
   --color-ink-soft: #A8A092;
-  --color-ink-faint: #736C61;
+  --color-ink-faint: #9E9689;
   --color-pine: #56826E;
   --color-pine-soft: #23352C;
   --color-plum: #947EAA;
@@ -34,6 +34,18 @@
   --color-ember-soft: #3D291C;
   --color-line: #38342E;
   --color-danger: #C46754;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
 
 * {

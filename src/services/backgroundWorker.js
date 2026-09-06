@@ -9,7 +9,19 @@ import { supabase } from './supabaseClient'
 import { invalidateCache } from './redisCacheService'
 import { sendNativeNotification } from './notificationService'
 
+const MAX_PROCESSED_EVENTS = 200
 const processedEvents = new Set()
+
+function trackProcessedEvent(eventId) {
+  if (!eventId) return false
+  if (processedEvents.has(eventId)) return true
+  if (processedEvents.size >= MAX_PROCESSED_EVENTS) {
+    const oldest = processedEvents.keys().next().value
+    if (oldest) processedEvents.delete(oldest)
+  }
+  processedEvents.add(eventId)
+  return false
+}
 
 /**
  * Worker Task 1: Asynchronous AI Trajectory & Synthesis Processing
@@ -101,15 +113,15 @@ function scheduleTaskOnIdle(taskFn) {
 export function initBackgroundWorkers() {
   const unsubs = [
     subscribeEvent(EVENTS.ENTRY_CREATED, (msg) => {
-      processedEvents.add(msg.eventId)
+      if (trackProcessedEvent(msg?.eventId)) return
       scheduleTaskOnIdle(() => handleEntryCreatedWorker(msg))
     }),
     subscribeEvent(EVENTS.PUBLIC_POST_PUBLISHED, (msg) => {
-      processedEvents.add(msg.eventId)
+      if (trackProcessedEvent(msg?.eventId)) return
       scheduleTaskOnIdle(() => handlePublicPostWorker(msg))
     }),
     subscribeEvent(EVENTS.NUDGE_CREATED, (msg) => {
-      processedEvents.add(msg.eventId)
+      if (trackProcessedEvent(msg?.eventId)) return
       scheduleTaskOnIdle(() => handleNudgeWorker(msg))
     })
   ]

@@ -17,9 +17,6 @@ serve(async (req) => {
   }
 
   try {
-    const url = new URL(req.url)
-    const actionPath = url.pathname.replace(/^\/redis-proxy/, '') // e.g. /get/my_key or /set/my_key/val/EX/60
-
     if (!UPSTASH_URL || !UPSTASH_TOKEN) {
       return new Response(JSON.stringify({ error: 'Upstash credentials not configured on edge worker' }), {
         status: 503,
@@ -27,8 +24,54 @@ serve(async (req) => {
       })
     }
 
-    const upstreamRes = await fetch(`${UPSTASH_URL}${actionPath}`, {
-      method: req.method,
+    // Require valid authentication
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({ error: 'Unauthorized: missing authorization bearer token' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
+    if (req.method !== 'POST') {
+      return new Response(JSON.stringify({ error: 'Method not allowed. Use POST with JSON payload.' }), {
+        status: 405,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
+    const { action, key, value, ttl = 60 } = await req.json()
+
+    if (!key || typeof key !== 'string') {
+      return new Response(JSON.stringify({ error: 'Invalid or missing cache key' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
+    // Sanitize and namespace key
+    const safeKey = `tl:${key.replace(/[^a-zA-Z0-9_:.-]/g, '_').slice(0, 150)}`
+
+    let upstreamUrl = ''
+    let reqMethod = 'GET'
+
+    if (action === 'get') {
+      upstreamUrl = `${UPSTASH_URL}/get/${encodeURIComponent(safeKey)}`
+    } else if (action === 'set') {
+      const serialized = typeof value === 'string' ? value : JSON.stringify(value)
+      const safeTtl = Math.min(Math.max(1, Number(ttl) || 60), 86400) // max 24h
+      upstreamUrl = `${UPSTASH_URL}/set/${encodeURIComponent(safeKey)}/${encodeURIComponent(serialized)}/EX/${safeTtl}`
+    } else if (action === 'del') {
+      upstreamUrl = `${UPSTASH_URL}/del/${encodeURIComponent(safeKey)}`
+    } else {
+      return new Response(JSON.stringify({ error: 'Invalid action. Allowed: get, set, del.' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
+    const upstreamRes = await fetch(upstreamUrl, {
+      method: reqMethod,
       headers: {
         Authorization: `Bearer ${UPSTASH_TOKEN}`
       }

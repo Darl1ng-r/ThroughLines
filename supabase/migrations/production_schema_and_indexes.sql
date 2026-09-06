@@ -140,7 +140,7 @@ SELECT cron.schedule(
 );
 
 -- ---------------------------------------------------------------------------
--- Production Performance Indexes (CREATE INDEX IF NOT EXISTS — fully idempotent)
+-- Production Performance & Full-Text Search Indexes
 -- ---------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_profiles_username           ON public.profiles (username);
 CREATE INDEX IF NOT EXISTS idx_topics_user_id             ON public.topics (user_id, created_at DESC);
@@ -152,6 +152,29 @@ CREATE INDEX IF NOT EXISTS idx_private_entries_topic_date ON public.private_entr
 CREATE INDEX IF NOT EXISTS idx_public_posts_feed          ON public.public_posts (moderation_status, entry_date DESC);
 CREATE INDEX IF NOT EXISTS idx_nudges_topic_id            ON public.nudges (topic_id);
 CREATE INDEX IF NOT EXISTS idx_nudges_created_at          ON public.nudges (created_at);
+
+-- Full-Text Search Generated Columns & GIN Indexes
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'topics' AND column_name = 'fts'
+    ) THEN
+        ALTER TABLE public.topics ADD COLUMN fts tsvector
+            GENERATED ALWAYS AS (to_tsvector('english', coalesce(title, ''))) STORED;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'public_posts' AND column_name = 'fts'
+    ) THEN
+        ALTER TABLE public.public_posts ADD COLUMN fts tsvector
+            GENERATED ALWAYS AS (to_tsvector('english', coalesce(content, ''))) STORED;
+    END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_topics_fts       ON public.topics USING gin(fts);
+CREATE INDEX IF NOT EXISTS idx_public_posts_fts ON public.public_posts USING gin(fts);
 
 -- ---------------------------------------------------------------------------
 -- Enable Row Level Security (enabling already-enabled RLS is a no-op — idempotent)
@@ -218,8 +241,6 @@ CREATE POLICY "Users can delete own private entries" ON public.private_entries
     FOR DELETE USING (auth.uid() = user_id);
 
 -- Public Posts
--- Note: The BEFORE INSERT trigger (moderate_public_post) already controls
--- moderation_status, so clients cannot persist an 'approved' status directly.
 DROP POLICY IF EXISTS "Approved public posts are viewable by everyone" ON public.public_posts;
 DROP POLICY IF EXISTS "Users can insert own public posts"              ON public.public_posts;
 DROP POLICY IF EXISTS "Users can update own public posts"              ON public.public_posts;
@@ -234,19 +255,16 @@ CREATE POLICY "Users can update own public posts" ON public.public_posts
 CREATE POLICY "Users can delete own public posts" ON public.public_posts
     FOR DELETE USING (auth.uid() = user_id);
 
--- Nudges
--- Rate-limiting strategy:
---   Layer 1 (unique constraint): CONSTRAINT unique_topic_nudger prevents duplicate rows.
---   Layer 2 (RLS INSERT policy): blocks nudges while nudge_cooldown_until is in the future.
---   Layer 3 (nginx): IP-level rate limiting at 10r/s.
---   Layer 4 (client): session-level throttle in checkRateLimit() (UX feedback only).
+-- Nudges (Multi-tenant secured and visible to both topic owners and nudgers)
 DROP POLICY IF EXISTS "Topic owners can view nudges"                        ON public.nudges;
+DROP POLICY IF EXISTS "Users can view relevant nudges"                      ON public.nudges;
 DROP POLICY IF EXISTS "Authenticated users can nudge topics of others once" ON public.nudges;
 DROP POLICY IF EXISTS "Topic owners can delete nudges"                      ON public.nudges;
 
-CREATE POLICY "Topic owners can view nudges" ON public.nudges
+CREATE POLICY "Users can view relevant nudges" ON public.nudges
     FOR SELECT USING (
-        EXISTS (
+        nudger_id = auth.uid()
+        OR EXISTS (
             SELECT 1 FROM public.topics
             WHERE topics.id = nudges.topic_id AND topics.user_id = auth.uid()
         )
@@ -271,8 +289,61 @@ CREATE POLICY "Topic owners can delete nudges" ON public.nudges
     );
 
 -- ---------------------------------------------------------------------------
+-- 8. Atomic Multi-Operation Entry Transaction Function (PL/pgSQL RPC)
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.create_entry_transaction(
+    p_topic_id UUID,
+    p_content TEXT,
+    p_confidence INT,
+    p_is_public BOOLEAN DEFAULT FALSE,
+    p_entry_date TIMESTAMPTZ DEFAULT NOW()
+)
+RETURNS jsonb AS $$
+DECLARE
+    v_user_id UUID;
+    v_entry_id UUID;
+    v_public_id UUID := NULL;
+    v_result jsonb;
+BEGIN
+    v_user_id := auth.uid();
+    IF v_user_id IS NULL THEN
+        RAISE EXCEPTION 'Unauthorized: User not authenticated';
+    END IF;
+
+    -- Verify topic ownership
+    IF NOT EXISTS (SELECT 1 FROM public.topics WHERE id = p_topic_id AND user_id = v_user_id) THEN
+        RAISE EXCEPTION 'Unauthorized: Topic does not belong to active user';
+    END IF;
+
+    -- 1. Insert private journal entry
+    INSERT INTO public.private_entries (topic_id, user_id, content, confidence_rating, entry_date)
+    VALUES (p_topic_id, v_user_id, p_content, p_confidence, p_entry_date)
+    RETURNING id INTO v_entry_id;
+
+    -- 2. Conditionally insert public post snapshot
+    IF p_is_public THEN
+        INSERT INTO public.public_posts (private_entry_id, topic_id, user_id, content, confidence_rating, entry_date)
+        VALUES (v_entry_id, p_topic_id, v_user_id, p_content, p_confidence, p_entry_date)
+        RETURNING id INTO v_public_id;
+    END IF;
+
+    -- 3. Clear nudges for this topic atomically
+    DELETE FROM public.nudges WHERE topic_id = p_topic_id;
+
+    SELECT jsonb_build_object(
+        'entryId', v_entry_id,
+        'publicPostId', v_public_id,
+        'topicId', p_topic_id,
+        'isPublic', p_is_public,
+        'entryDate', p_entry_date
+    ) INTO v_result;
+
+    RETURN v_result;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ---------------------------------------------------------------------------
 -- Supabase Realtime WebSockets
--- Idempotent: wrapped in DO block to guard against duplicate ADD TABLE errors.
 -- ---------------------------------------------------------------------------
 DO $$
 BEGIN

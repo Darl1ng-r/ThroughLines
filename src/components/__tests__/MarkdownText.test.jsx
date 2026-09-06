@@ -23,4 +23,17 @@ describe('MarkdownText component', () => {
     expect(html).toContain('Point B')
     expect(html).toContain('<li')
   })
+
+  it('renders safe https links correctly', () => {
+    const html = renderToStaticMarkup(<MarkdownText content="Read the [Docs](https://example.com/docs)" />)
+    expect(html).toContain('href="https://example.com/docs"')
+    expect(html).toContain('rel="noopener noreferrer"')
+    expect(html).toContain('target="_blank"')
+  })
+
+  it('blocks and sanitizes XSS javascript: URI links', () => {
+    const html = renderToStaticMarkup(<MarkdownText content="Click [Attack](javascript:alert(document.cookie))" />)
+    expect(html).not.toContain('javascript:')
+    expect(html).toContain('href="#"')
+  })
 })

@@ -12,6 +12,7 @@
  * handled server-side by the Nginx proxy (see nginx.conf + Dockerfile).
  */
 
+const MAX_MEMORY_ENTRIES = 500
 const memoryCache = new Map()
 const rateLimits = new Map()
 
@@ -19,9 +20,8 @@ const rateLimits = new Map()
 // Fall through to the in-memory cache immediately.
 const isTestEnv = import.meta.env.MODE === 'test'
 
-// Proxy URL: defaults to the Nginx /api/cache/ reverse proxy (same origin, no token needed).
-// Override via VITE_REDIS_PROXY_URL to point at a Supabase Edge Function instead.
-const PROXY_CACHE_URL = isTestEnv ? null : (import.meta.env.VITE_REDIS_PROXY_URL || '/api/cache')
+// Proxy URL: defaults to the Nginx /api/cache/ reverse proxy or Edge Function.
+const PROXY_CACHE_URL = isTestEnv ? null : (import.meta.env.VITE_REDIS_PROXY_URL || null)
 
 /**
  * Retrieve cached value by key.
@@ -29,28 +29,38 @@ const PROXY_CACHE_URL = isTestEnv ? null : (import.meta.env.VITE_REDIS_PROXY_URL
  * @returns {Promise<any|null>}
  */
 export async function getCache(key) {
+  if (!key) return null
+
+  // Check in-memory L1 cache first
+  const entry = memoryCache.get(key)
+  if (entry) {
+    if (Date.now() <= entry.expiry) {
+      return entry.value
+    }
+    memoryCache.delete(key)
+  }
+
   if (PROXY_CACHE_URL) {
     try {
-      const res = await fetch(`${PROXY_CACHE_URL}/get/${encodeURIComponent(key)}`)
+      const res = await fetch(`${PROXY_CACHE_URL}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get', key })
+      })
       if (res.ok) {
         const data = await res.json()
         if (data && data.result) {
-          return JSON.parse(data.result)
+          const parsed = typeof data.result === 'string' ? JSON.parse(data.result) : data.result
+          memoryCache.set(key, { value: parsed, expiry: Date.now() + 60000 })
+          return parsed
         }
       }
     } catch (err) {
-      console.warn('[Cache] Proxy unreachable, using memory fallback:', err.message)
+      // Graceful fallback to memory
     }
   }
 
-  // In-memory fallback
-  const entry = memoryCache.get(key)
-  if (!entry) return null
-  if (Date.now() > entry.expiry) {
-    memoryCache.delete(key)
-    return null
-  }
-  return entry.value
+  return null
 }
 
 /**
@@ -60,23 +70,30 @@ export async function getCache(key) {
  * @param {number} ttlSeconds
  */
 export async function setCache(key, value, ttlSeconds = 60) {
-  const jsonStr = JSON.stringify(value)
+  if (!key) return
 
-  if (PROXY_CACHE_URL) {
-    try {
-      await fetch(
-        `${PROXY_CACHE_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(jsonStr)}/EX/${ttlSeconds}`
-      )
-    } catch (err) {
-      console.warn('[Cache] Proxy set failed, using memory fallback:', err.message)
-    }
+  // Bounded LRU eviction for in-memory cache
+  if (memoryCache.size >= MAX_MEMORY_ENTRIES) {
+    const firstKey = memoryCache.keys().next().value
+    if (firstKey) memoryCache.delete(firstKey)
   }
 
-  // Always write to the in-memory fallback (serves as local L1 cache too)
   memoryCache.set(key, {
     value,
     expiry: Date.now() + ttlSeconds * 1000,
   })
+
+  if (PROXY_CACHE_URL) {
+    try {
+      await fetch(`${PROXY_CACHE_URL}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set', key, value, ttl: ttlSeconds })
+      })
+    } catch (_) {
+      // Memory fallback is already set
+    }
+  }
 }
 
 /**
@@ -84,14 +101,18 @@ export async function setCache(key, value, ttlSeconds = 60) {
  * @param {string} key
  */
 export async function invalidateCache(key) {
+  if (!key) return
+  memoryCache.delete(key)
+
   if (PROXY_CACHE_URL) {
     try {
-      await fetch(`${PROXY_CACHE_URL}/del/${encodeURIComponent(key)}`)
-    } catch (err) {
-      console.warn('[Cache] Proxy del failed:', err.message)
-    }
+      await fetch(`${PROXY_CACHE_URL}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'del', key })
+      })
+    } catch (_) {}
   }
-  memoryCache.delete(key)
 }
 
 /**

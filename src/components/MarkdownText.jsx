@@ -29,6 +29,20 @@ export default function MarkdownText({ content, className = "", style = {} }) {
     }
   }
 
+  function sanitizeUrl(url) {
+    if (!url || typeof url !== 'string') return '#'
+    const trimmed = url.trim()
+    // Allow relative paths
+    if (trimmed.startsWith('/') || trimmed.startsWith('#')) return trimmed
+    try {
+      const parsed = new URL(trimmed, 'https://throughlines.app')
+      if (['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
+        return trimmed
+      }
+    } catch (_) {}
+    return '#'
+  }
+
   function formatInline(text) {
     // Simple inline formatting: code, bold, italic, links
     const parts = []
@@ -58,8 +72,9 @@ export default function MarkdownText({ content, className = "", style = {} }) {
       } else if (token.startsWith('[')) {
         const linkMatch = token.match(/\[([^\]]+)\]\(([^)]+)\)/)
         if (linkMatch) {
+          const safeHref = sanitizeUrl(linkMatch[2])
           parts.push(
-            <a key={key++} href={linkMatch[2]} target="_blank" rel="noopener noreferrer" style={{ color: tokens.pine, textDecoration: 'underline' }}>
+            <a key={key++} href={safeHref} target="_blank" rel="noopener noreferrer" style={{ color: tokens.pine, textDecoration: 'underline' }}>
               {linkMatch[1]}
             </a>
           )

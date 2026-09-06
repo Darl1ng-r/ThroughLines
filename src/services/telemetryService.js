@@ -6,8 +6,24 @@
 const metrics = new Map()
 const errorLogs = []
 const MAX_ERROR_LOGS = 50
+const TELEMETRY_STORAGE_KEY = 'tl_telemetry_queue'
+const TELEMETRY_URL = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_TELEMETRY_ENDPOINT : null
 
-const TELEMETRY_URL = import.meta.env.VITE_TELEMETRY_ENDPOINT
+function loadPersistedQueue() {
+  if (typeof window === 'undefined') return []
+  try {
+    return JSON.parse(localStorage.getItem(TELEMETRY_STORAGE_KEY) || '[]')
+  } catch (_) {
+    return []
+  }
+}
+
+function savePersistedQueue(queue) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(TELEMETRY_STORAGE_KEY, JSON.stringify(queue.slice(0, 30)))
+  } catch (_) {}
+}
 
 /**
  * Record a performance metric
@@ -45,6 +61,10 @@ export function logError(error, context = {}) {
     errorLogs.pop()
   }
 
+  const persisted = loadPersistedQueue()
+  persisted.unshift(errorEvent)
+  savePersistedQueue(persisted)
+
   // Dispatch to external Telemetry Endpoint if configured
   if (TELEMETRY_URL) {
     try {
@@ -52,6 +72,10 @@ export function logError(error, context = {}) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(errorEvent)
+      }).then(res => {
+        if (res.ok) {
+          savePersistedQueue([])
+        }
       }).catch(_ => {})
     } catch (_) {}
   }

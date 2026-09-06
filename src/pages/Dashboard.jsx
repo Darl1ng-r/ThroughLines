@@ -46,7 +46,14 @@ const tokens = {
 
 function Meter({ value }) {
   return (
-    <div className="flex items-center gap-2">
+    <div 
+      className="flex items-center gap-2"
+      role="meter"
+      aria-label="Conviction level"
+      aria-valuenow={value}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
       <div style={{ width: 46, height: 4, borderRadius: 2, background: tokens.line, overflow: "hidden" }}>
         <div style={{ width: `${value}%`, height: "100%", background: tokens.pine }} />
       </div>
@@ -183,7 +190,7 @@ export default function Dashboard() {
     }
   }, [selectedId])
 
-  // Real-Time WebSocket Listener for Nudges
+  // Real-Time WebSocket Listener for Nudges (Scoped to current user's topics)
   useEffect(() => {
     if (!user) return
 
@@ -191,18 +198,24 @@ export default function Dashboard() {
     requestNotificationPermission()
 
     const channel = supabase
-      .channel('dashboard_nudges_ws')
+      .channel(`dashboard_nudges_ws_${user.id}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'nudges' },
         (payload) => {
           const newNudge = payload.new
           if (newNudge && newNudge.topic_id) {
-            setNudges(prev => [...prev, newNudge])
-            triggerToast("🔔 Someone just nudged you for an update!")
-            sendNativeNotification("🌿 New Throughline Nudge!", {
-              body: "Someone requested an update on your throughline!",
-              url: "/dashboard"
+            setTopics(currentTopics => {
+              const ownsTopic = currentTopics.some(t => t.id === newNudge.topic_id)
+              if (ownsTopic) {
+                setNudges(prev => [...prev.filter(n => n.id !== newNudge.id), newNudge])
+                triggerToast("🔔 Someone just nudged you for an update!")
+                sendNativeNotification("🌿 New Throughline Nudge!", {
+                  body: "Someone requested an update on your throughline!",
+                  url: "/dashboard"
+                })
+              }
+              return currentTopics
             })
           }
         }

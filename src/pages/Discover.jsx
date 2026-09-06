@@ -156,8 +156,9 @@ export default function Discover() {
         req = req.lt('created_at', cursor)
       }
 
-      if (cleanQuery) {
-        req = req.or(`title.ilike.%${cleanQuery}%,public_posts.content.ilike.%${cleanQuery}%`)
+      const sanitized = cleanQuery.replace(/[^a-zA-Z0-9 _-]/g, '').trim()
+      if (sanitized) {
+        req = req.ilike('title', `%${sanitized}%`)
       }
 
       const { data, error } = await req

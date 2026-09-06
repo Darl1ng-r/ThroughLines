@@ -40,6 +40,7 @@ const EntryComposer = memo(function EntryComposer({
           value={composeText}
           disabled={submitting}
           maxLength={5000}
+          aria-label="Journal entry content"
           onChange={(e) => onComposeChange(e.target.value)}
           placeholder="Why do you believe that — today? Your drafts are saved automatically."
           rows={3}
@@ -68,6 +69,10 @@ const EntryComposer = memo(function EntryComposer({
             max="100" 
             disabled={submitting}
             value={composeConfidence} 
+            aria-label="Confidence rating percentage"
+            aria-valuenow={composeConfidence}
+            aria-valuemin={0}
+            aria-valuemax={100}
             onChange={(e) => setComposeConfidence(Number(e.target.value))} 
             className="tl-range tl-focus" 
           />
@@ -78,9 +83,13 @@ const EntryComposer = memo(function EntryComposer({
 
         {/* Visibility and Save Buttons */}
         <div className="flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-1" style={{ background: tokens.paperDeep, borderRadius: 999, padding: 3 }}>
+          <div className="flex items-center gap-1" role="radiogroup" aria-label="Entry visibility" style={{ background: tokens.paperDeep, borderRadius: 999, padding: 3 }}>
             <button 
               disabled={submitting}
+              type="button"
+              role="radio"
+              aria-checked={composeVisibility === "private"}
+              aria-label="Set entry visibility to private"
               onClick={() => setComposeVisibility("private")} 
               className="tl-focus"
               style={{
@@ -98,6 +107,10 @@ const EntryComposer = memo(function EntryComposer({
             </button>
             <button 
               disabled={submitting}
+              type="button"
+              role="radio"
+              aria-checked={composeVisibility === "public"}
+              aria-label="Set entry visibility to public"
               onClick={() => setComposeVisibility("public")} 
               className="tl-focus"
               style={{
@@ -116,7 +129,9 @@ const EntryComposer = memo(function EntryComposer({
           </div>
 
           <button 
+            type="button"
             onClick={onAddEntry}
+            aria-label={submitting ? "Logging entry..." : "Log entry"}
             disabled={!composeText.trim() || submitting}
             className="tl-focus btn-premium flex items-center gap-1"
             style={{ 
