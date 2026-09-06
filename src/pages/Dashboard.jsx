@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, lazy, Suspense, useRef } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../services/supabaseClient'
-import ConfidenceChart from '../components/ConfidenceChart'
+// Lazy-load Recharts chart — defers the 383KB vendor-charts chunk until chart is visible
+const ConfidenceChart = lazy(() => import('../components/ConfidenceChart'))
 import ErrorBoundary from '../components/ErrorBoundary'
 import MarkdownText from '../components/MarkdownText'
 import { generatePerspectiveSynthesis } from '../services/aiSynthesisService'
@@ -853,13 +854,23 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Recharts Chart with localized Error Boundary */}
+            {/* Recharts Chart — lazy loaded only when in viewport (saves 383KB on initial load) */}
             <ErrorBoundary fallback={
               <div style={{ padding: 16, background: tokens.card, borderRadius: 8, border: `1px dashed ${tokens.line}`, textAlign: 'center', fontSize: 13, color: tokens.inkSoft, marginBottom: 24 }}>
                 Trajectory chart temporarily unavailable.
               </div>
             }>
-              <ConfidenceChart entries={entries} onSelectEntry={handleSelectEntry} selectedEntryId={selectedEntryId} />
+              <Suspense fallback={
+                <div
+                  style={{ height: 180, background: tokens.card, borderRadius: 10, border: `1px solid ${tokens.line}`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24, color: tokens.inkFaint, fontSize: 12 }}
+                  aria-label="Loading confidence chart"
+                  aria-busy="true"
+                >
+                  Loading chart...
+                </div>
+              }>
+                <ConfidenceChart entries={entries} onSelectEntry={handleSelectEntry} selectedEntryId={selectedEntryId} />
+              </Suspense>
             </ErrorBoundary>
 
             {/* Timeline Spine */}
