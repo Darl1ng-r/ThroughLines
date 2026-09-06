@@ -45,37 +45,19 @@ async function handleEntryCreatedWorker(eventMessage) {
 }
 
 /**
- * Worker Task 2: Asynchronous Content Moderation & Quality Scan
+ * Worker Task 2: Asynchronous Content Cache Invalidation
  * @param {Object} eventMessage 
  */
 export async function handlePublicPostWorker(eventMessage) {
-  const { postId, content } = eventMessage.payload || {}
-  if (!postId || !content) return
+  const { postId } = eventMessage.payload || {}
+  if (!postId) return
 
   try {
-    // 1. Content Moderation & Spam Detection Rules
-    const httpCount = (content.match(/https?:\/\//gi) || []).length
-    const isSpam = content.length > 4500 || httpCount > 3 || /\b(casino|crypto-airdrop|free-followers|phishing)\b/i.test(content)
-    const newStatus = isSpam ? 'flagged' : 'approved'
-
-    // 2. Persist updated moderation status directly to database
-    const { error } = await supabase
-      .from('public_posts')
-      .update({ moderation_status: newStatus })
-      .eq('id', postId)
-
-    if (error) {
-      console.warn(`[Background Worker] DB update failed for post [${postId}]:`, error.message)
-    }
-
-    // 3. Invalidate Discover feed cache so updated status reflects immediately
+    // Invalidate Discover feed cache so new public post reflects immediately
     await invalidateCache('discover_feed_cursor_null')
-
-    console.log(`[Background Worker] Moderation scan completed for post [${postId}]:`, {
-      moderationStatus: newStatus
-    })
+    console.log(`[Background Worker] Cache invalidated for public post [${postId}]`)
   } catch (err) {
-    console.error(`[Background Worker] Moderation scan error for post [${postId}]:`, err)
+    console.error(`[Background Worker] Cache invalidation error for post [${postId}]:`, err)
   }
 }
 

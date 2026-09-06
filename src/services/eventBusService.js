@@ -1,6 +1,6 @@
 /**
- * Event Bus Streaming Publisher Service (Kafka / RabbitMQ Pattern)
- * Enables asynchronous, event-driven architecture across ThroughLines services.
+ * Event Bus Publisher Service
+ * Enables decoupled, asynchronous in-memory event communication across UI components and client workers.
  */
 
 export const EVENTS = {
@@ -10,9 +10,6 @@ export const EVENTS = {
 }
 
 const listeners = new Map()
-
-const KAFKA_URL = import.meta.env.VITE_KAFKA_REST_URL
-const RABBITMQ_URL = import.meta.env.VITE_RABBITMQ_STOMP_URL
 
 /**
  * Subscribe to an event stream
@@ -35,7 +32,7 @@ export function subscribeEvent(eventTopic, handler) {
 }
 
 /**
- * Asynchronously publish an event to the Event Bus
+ * Asynchronously publish an event to the local Event Bus
  * @param {string} eventTopic 
  * @param {Object} payload 
  */
@@ -47,34 +44,7 @@ export async function publishEvent(eventTopic, payload = {}) {
     payload
   }
 
-  // 1. Forward to external Kafka REST Proxy if configured
-  if (KAFKA_URL) {
-    try {
-      fetch(`${KAFKA_URL}/topics/${eventTopic}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/vnd.kafka.json.v2+json' },
-        body: JSON.stringify({ records: [{ value: eventMessage }] })
-      }).catch(err => console.warn('Kafka REST dispatch warning:', err))
-    } catch (_) {}
-  }
-
-  // 2. Forward to external RabbitMQ Web STOMP if configured
-  if (RABBITMQ_URL) {
-    try {
-      fetch(`${RABBITMQ_URL}/api/exchanges/%2F/amq.default/publish`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          properties: {},
-          routing_key: eventTopic,
-          payload: JSON.stringify(eventMessage),
-          payload_encoding: 'string'
-        })
-      }).catch(err => console.warn('RabbitMQ REST dispatch warning:', err))
-    } catch (_) {}
-  }
-
-  // 3. Asynchronous Non-Blocking Local Event Bus Dispatch
+  // Asynchronous Non-Blocking Local Event Bus Dispatch
   const topicListeners = listeners.get(eventTopic)
   if (topicListeners && topicListeners.size > 0) {
     setTimeout(() => {

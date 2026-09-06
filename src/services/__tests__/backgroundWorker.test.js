@@ -48,32 +48,18 @@ describe('backgroundWorker', () => {
     cleanup()
   })
 
-  it('scans post content and updates moderation_status in database', async () => {
-    const updateSpy = vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ data: [], error: null }) })
-    vi.mocked(supabase.from).mockReturnValue({ update: updateSpy })
+  it('invalidates discover cache on public post publish event', async () => {
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
 
     await handlePublicPostWorker({
       payload: {
-        postId: 'post_789',
-        content: 'Clean thoughtful reflection on technology'
+        postId: 'post_789'
       }
     })
 
-    expect(supabase.from).toHaveBeenCalledWith('public_posts')
-    expect(updateSpy).toHaveBeenCalledWith({ moderation_status: 'approved' })
-  })
-
-  it('flags post content with spam indicators', async () => {
-    const updateSpy = vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ data: [], error: null }) })
-    vi.mocked(supabase.from).mockReturnValue({ update: updateSpy })
-
-    await handlePublicPostWorker({
-      payload: {
-        postId: 'post_spam',
-        content: 'Get free-followers now at http://spam1.com http://spam2.com http://spam3.com http://spam4.com'
-      }
-    })
-
-    expect(updateSpy).toHaveBeenCalledWith({ moderation_status: 'flagged' })
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[Background Worker] Cache invalidated for public post [post_789]')
+    )
+    consoleSpy.mockRestore()
   })
 })

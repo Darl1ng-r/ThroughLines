@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { supabase } from '../services/supabaseClient'
 import ConfidenceChart from '../components/ConfidenceChart'
+import ErrorBoundary from '../components/ErrorBoundary'
 import MarkdownText from '../components/MarkdownText'
 import { generatePerspectiveSynthesis } from '../services/aiSynthesisService'
 import { getDraft, saveDraft, removeDraft } from '../services/draftStorage'
@@ -427,40 +428,77 @@ export default function Dashboard() {
     try {
       setSubmitting(true)
       const entryDate = new Date().toISOString()
-      
-      // 1. Add private entry
-      const { data: newEntryData, error: entryErr } = await supabase
-        .from('private_entries')
-        .insert({
+      const isPublic = composeVisibility === 'public'
+      const confRating = Number(composeConfidence)
+
+      let entry = null
+      let publicPostObj = null
+
+      // Attempt atomic database transaction via RPC
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('create_entry_transaction', {
+        p_topic_id: selectedTopic.id,
+        p_content: text,
+        p_confidence: confRating,
+        p_is_public: isPublic,
+        p_entry_date: entryDate
+      })
+
+      if (!rpcErr && rpcData && rpcData.entryId) {
+        entry = {
+          id: rpcData.entryId,
           topic_id: selectedTopic.id,
           user_id: user.id,
           content: text,
-          confidence_rating: Number(composeConfidence),
+          confidence_rating: confRating,
           entry_date: entryDate
-        })
-        .select()
-
-      if (entryErr) throw entryErr
-      
-      const entry = newEntryData[0]
-
-      // 2. Add public post if selected public
-      let publicPostObj = null
-      if (composeVisibility === 'public') {
-        const { data: pubData, error: pubErr } = await supabase
-          .from('public_posts')
-          .insert({
-            private_entry_id: entry.id,
+        }
+        if (isPublic && rpcData.publicPostId) {
+          publicPostObj = {
+            id: rpcData.publicPostId,
+            private_entry_id: rpcData.entryId,
             topic_id: selectedTopic.id,
             user_id: user.id,
             content: text,
-            confidence_rating: Number(composeConfidence),
+            confidence_rating: confRating,
+            moderation_status: 'approved',
+            entry_date: entryDate
+          }
+        }
+      } else {
+        // Fallback to sequential inserts if RPC is not available in mock/local environment
+        const { data: newEntryData, error: entryErr } = await supabase
+          .from('private_entries')
+          .insert({
+            topic_id: selectedTopic.id,
+            user_id: user.id,
+            content: text,
+            confidence_rating: confRating,
             entry_date: entryDate
           })
           .select()
 
-        if (pubErr) throw pubErr
-        publicPostObj = pubData[0]
+        if (entryErr) throw entryErr
+        entry = newEntryData[0]
+
+        if (isPublic) {
+          const { data: pubData, error: pubErr } = await supabase
+            .from('public_posts')
+            .insert({
+              private_entry_id: entry.id,
+              topic_id: selectedTopic.id,
+              user_id: user.id,
+              content: text,
+              confidence_rating: confRating,
+              entry_date: entryDate
+            })
+            .select()
+
+          if (pubErr) throw pubErr
+          publicPostObj = pubData[0]
+        }
+
+        // Clear nudges
+        await supabase.from('nudges').delete().eq('topic_id', selectedTopic.id)
       }
 
       // Add to state
@@ -813,8 +851,14 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Recharts Chart */}
-            <ConfidenceChart entries={entries} onSelectEntry={handleSelectEntry} selectedEntryId={selectedEntryId} />
+            {/* Recharts Chart with localized Error Boundary */}
+            <ErrorBoundary fallback={
+              <div style={{ padding: 16, background: tokens.card, borderRadius: 8, border: `1px dashed ${tokens.line}`, textAlign: 'center', fontSize: 13, color: tokens.inkSoft, marginBottom: 24 }}>
+                Trajectory chart temporarily unavailable.
+              </div>
+            }>
+              <ConfidenceChart entries={entries} onSelectEntry={handleSelectEntry} selectedEntryId={selectedEntryId} />
+            </ErrorBoundary>
 
             {/* Timeline Spine */}
             <div style={{ position: "relative" }}>

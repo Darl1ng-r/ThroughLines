@@ -158,7 +158,7 @@ export default function Discover() {
 
       const sanitized = cleanQuery.replace(/[^a-zA-Z0-9 _-]/g, '').trim()
       if (sanitized) {
-        req = req.ilike('title', `%${sanitized}%`)
+        req = req.textSearch('fts', sanitized, { config: 'english', type: 'websearch' })
       }
 
       const { data, error } = await req

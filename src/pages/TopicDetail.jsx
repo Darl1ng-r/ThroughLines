@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../services/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import ConfidenceChart from '../components/ConfidenceChart'
+import ErrorBoundary from '../components/ErrorBoundary'
 import { ArrowLeft, Send } from 'lucide-react'
 
 import MarkdownText from '../components/MarkdownText'
@@ -284,8 +285,14 @@ export default function TopicDetail() {
           )}
         </div>
 
-        {/* Confidence Chart */}
-        <ConfidenceChart entries={chartEntries} onSelectEntry={handleSelectEntry} selectedEntryId={selectedEntryId} />
+        {/* Confidence Chart with localized Error Boundary */}
+        <ErrorBoundary fallback={
+          <div style={{ padding: 16, background: tokens.card, borderRadius: 8, border: `1px dashed ${tokens.line}`, textAlign: 'center', fontSize: 13, color: tokens.inkSoft, marginBottom: 24 }}>
+            Trajectory chart temporarily unavailable.
+          </div>
+        }>
+          <ConfidenceChart entries={chartEntries} onSelectEntry={handleSelectEntry} selectedEntryId={selectedEntryId} />
+        </ErrorBoundary>
 
         {/* Timeline List */}
         {posts.length === 0 ? (

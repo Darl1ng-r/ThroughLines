@@ -1,10 +1,10 @@
-// Supabase Edge Function: Secure Redis Proxy
-// Proxies Upstash Redis requests using server-side secrets (UPSTASH_REDIS_REST_TOKEN)
-
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const UPSTASH_URL = Deno.env.get('UPSTASH_REDIS_REST_URL')
 const UPSTASH_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN')
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -33,6 +33,19 @@ serve(async (req) => {
       })
     }
 
+    // Cryptographically verify token with Supabase Auth
+    const supabase = createClient(SUPABASE_URL || '', SUPABASE_ANON_KEY || '', {
+      global: { headers: { Authorization: authHeader } }
+    })
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized: invalid or expired session token' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
     if (req.method !== 'POST') {
       return new Response(JSON.stringify({ error: 'Method not allowed. Use POST with JSON payload.' }), {
         status: 405,
@@ -49,8 +62,9 @@ serve(async (req) => {
       })
     }
 
-    // Sanitize and namespace key
-    const safeKey = `tl:${key.replace(/[^a-zA-Z0-9_:.-]/g, '_').slice(0, 150)}`
+    // Multi-tenant isolation: namespace by authenticated user ID
+    const sanitizedKey = key.replace(/[^a-zA-Z0-9_:.-]/g, '_').slice(0, 100)
+    const safeKey = `tl:u:${user.id}:${sanitizedKey}`
 
     let upstreamUrl = ''
     let reqMethod = 'GET'

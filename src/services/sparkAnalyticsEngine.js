@@ -1,39 +1,14 @@
 /**
- * Apache Spark & Dataproc Global Belief Trend Mining Engine
- * Performs macro analytical processing over historical throughlines.
+ * Macro Belief Trend Analytics Engine
+ * Computes velocity, volatility standard deviation, and evolution trends over throughlines.
  */
 
-const SPARK_URL = import.meta.env.VITE_SPARK_DATAPROC_URL
-
 /**
- * Run PySpark / Dataproc macro analytics over public topics
+ * Run macro analytics over public topics
  * @param {Array} topics 
  * @returns {Promise<{ totalTopics: number, avgShift: number, macroVelocity: string, macroVolatility: number, topEvolved: Array }>}
  */
 export async function computeMacroBeliefTrends(topics = []) {
-  // 1. Submit Dataproc Batch Job if configured
-  if (SPARK_URL && Array.isArray(topics) && topics.length > 0) {
-    try {
-      const res = await fetch(`${SPARK_URL}/jobs/submit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          job: {
-            placement: { clusterName: 'throughlines-spark-cluster' },
-            pysparkJob: { mainPythonFileUri: 'gs://throughlines-analytics/belief_trend_mining.py' }
-          }
-        })
-      })
-      const sparkResult = await res.json()
-      if (sparkResult && sparkResult.metrics) {
-        return sparkResult.metrics
-      }
-    } catch (err) {
-      console.warn('[Spark Analytics] Dataproc REST submission warning, using client analytics engine:', err)
-    }
-  }
-
-  // 2. High-Performance Client Spark Analytical Engine Fallback
   if (!topics || topics.length === 0) {
     return {
       totalTopics: 0,
