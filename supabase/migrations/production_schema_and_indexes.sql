@@ -80,9 +80,14 @@ CREATE TABLE IF NOT EXISTS public.nudges (
 -- 6. Server-Side Content Moderation Trigger
 -- Runs BEFORE INSERT/UPDATE inside PostgreSQL — cannot be bypassed by any client.
 -- Using a subquery on regexp_matches() for PG13+ compatibility (not REGEXP_COUNT).
+-- Hardened with explicit search_path and restricted EXECUTE permissions.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.moderate_public_post()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
 DECLARE
     http_count INT := 0;
     is_spam    BOOLEAN;
@@ -103,7 +108,10 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
+
+-- Trigger functions must NOT be callable via PostgREST RPC (/rest/v1/rpc/...)
+REVOKE EXECUTE ON FUNCTION public.moderate_public_post() FROM PUBLIC, anon, authenticated;
 
 -- Idempotent trigger: DROP IF EXISTS first, then CREATE
 DROP TRIGGER IF EXISTS trigger_moderate_public_post ON public.public_posts;
@@ -115,14 +123,22 @@ CREATE TRIGGER trigger_moderate_public_post
 -- ---------------------------------------------------------------------------
 -- 7. Nudge TTL Cleanup Function (runs daily via pg_cron at 03:00 UTC)
 -- Requires pg_cron extension — enable in Supabase Dashboard > Database > Extensions.
+-- Hardened with explicit search_path and restricted EXECUTE permissions.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.cleanup_old_nudges()
-RETURNS void AS $$
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
 BEGIN
     DELETE FROM public.nudges
     WHERE created_at < NOW() - INTERVAL '30 days';
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
+
+-- Internal maintenance functions must NOT be callable via PostgREST RPC
+REVOKE EXECUTE ON FUNCTION public.cleanup_old_nudges() FROM PUBLIC, anon, authenticated;
 
 -- Idempotent cron scheduling: unschedule by name if it exists, then register fresh.
 -- cron.unschedule() is idempotent only when guarded — the WHERE EXISTS prevents an
@@ -256,6 +272,9 @@ CREATE POLICY "Users can delete own public posts" ON public.public_posts
     FOR DELETE USING (auth.uid() = user_id);
 
 -- Nudges (Multi-tenant secured and visible to both topic owners and nudgers)
+-- Clean up legacy insecure/permissive policies
+DROP POLICY IF EXISTS "Allow public insert to nudges"                       ON public.nudges;
+DROP POLICY IF EXISTS "Allow authenticated insert to nudges"                ON public.nudges;
 DROP POLICY IF EXISTS "Topic owners can view nudges"                        ON public.nudges;
 DROP POLICY IF EXISTS "Users can view relevant nudges"                      ON public.nudges;
 DROP POLICY IF EXISTS "Authenticated users can nudge topics of others once" ON public.nudges;
@@ -290,6 +309,7 @@ CREATE POLICY "Topic owners can delete nudges" ON public.nudges
 
 -- ---------------------------------------------------------------------------
 -- 8. Atomic Multi-Operation Entry Transaction Function (PL/pgSQL RPC)
+-- Hardened with explicit search_path and restricted to authenticated role.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.create_entry_transaction(
     p_topic_id UUID,
@@ -298,7 +318,11 @@ CREATE OR REPLACE FUNCTION public.create_entry_transaction(
     p_is_public BOOLEAN DEFAULT FALSE,
     p_entry_date TIMESTAMPTZ DEFAULT NOW()
 )
-RETURNS jsonb AS $$
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
 DECLARE
     v_user_id UUID;
     v_entry_id UUID;
@@ -340,7 +364,76 @@ BEGIN
 
     RETURN v_result;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
+
+-- Grant RPC execution only to authenticated users (block anon / public)
+REVOKE EXECUTE ON FUNCTION public.create_entry_transaction(UUID, TEXT, INT, BOOLEAN, TIMESTAMPTZ) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.create_entry_transaction(UUID, TEXT, INT, BOOLEAN, TIMESTAMPTZ) TO authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 9. Handle New User Trigger Function (Auth Helper)
+-- Creates profile record upon user signup. Hardened against search_path injection
+-- and RPC execution exposure.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+    INSERT INTO public.profiles (id, username, display_name, avatar_url)
+    VALUES (
+        NEW.id,
+        COALESCE(
+            NEW.raw_user_meta_data->>'username',
+            LOWER(REGEXP_REPLACE(SPLIT_PART(COALESCE(NEW.email, 'user'), '@', 1), '[^a-zA-Z0-9_]', '', 'g')) || FLOOR(RANDOM() * 1000)::TEXT
+        ),
+        COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', 'Thinker'),
+        NEW.raw_user_meta_data->>'avatar_url'
+    )
+    ON CONFLICT (id) DO NOTHING;
+    RETURN NEW;
+END;
+$$;
+
+-- Revoke RPC execution for trigger function
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
+
+-- Safely attach trigger to auth.users if not already attached
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger
+        WHERE tgname = 'on_auth_user_created'
+    ) THEN
+        IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'auth' AND tablename = 'users') THEN
+            CREATE TRIGGER on_auth_user_created
+                AFTER INSERT ON auth.users
+                FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+        END IF;
+    END IF;
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- 10. Security Hardening for System/Legacy Helper Functions
+-- Revoke RPC access on rls_auto_enable if present in public schema
+-- ---------------------------------------------------------------------------
+DO $$
+DECLARE
+    func_record RECORD;
+BEGIN
+    FOR func_record IN
+        SELECT p.proname, pg_get_function_identity_arguments(p.oid) as args
+        FROM pg_proc p
+        JOIN pg_namespace n ON p.pronamespace = n.oid
+        WHERE n.nspname = 'public'
+          AND p.proname IN ('rls_auto_enable')
+    LOOP
+        EXECUTE format('ALTER FUNCTION public.%I(%s) SET search_path = public, pg_temp;', func_record.proname, func_record.args);
+        EXECUTE format('REVOKE EXECUTE ON FUNCTION public.%I(%s) FROM PUBLIC, anon, authenticated;', func_record.proname, func_record.args);
+    END LOOP;
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- Supabase Realtime WebSockets

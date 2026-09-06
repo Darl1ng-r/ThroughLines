@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { checkPasswordBreached } from '../services/passwordSecurityService'
 import { ShieldCheck, LogIn, UserPlus } from 'lucide-react'
 
 const tokens = {
@@ -72,6 +73,16 @@ export default function Landing() {
         await signIn(email, password)
         navigate('/dashboard')
       } else {
+        // Zero-cost privacy-preserving leaked password check (NIST SP 800-63B compliant)
+        const breachCheck = await checkPasswordBreached(password)
+        if (breachCheck.isBreached) {
+          setErrorMsg(
+            `This password has appeared in ${breachCheck.count.toLocaleString()} known data breaches. Please choose a stronger, unique password.`
+          )
+          setLoading(false)
+          return
+        }
+
         await signUp(email, password, username.toLowerCase(), displayName)
         // Auto sign-in or prompt for email confirmation
         setErrorMsg("Account created! Logging you in...")
