@@ -51,6 +51,7 @@ export default function Discover() {
   const FEED_PAGE_SIZE = 12
 
   useEffect(() => {
+    document.title = 'Discover — Throughline'
     fetchDiscoverFeed(null, true, searchQuery)
 
     // Real-Time WebSocket Listener for live public posts

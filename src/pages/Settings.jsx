@@ -27,11 +27,13 @@ export default function Settings() {
   const [isError, setIsError] = useState(false)
 
   useEffect(() => {
+    document.title = 'Settings — Throughline'
     if (profile) {
       setDisplayName(profile.display_name || "")
       setBio(profile.bio || "")
     }
   }, [profile])
+
 
   async function handleSave(e) {
     e.preventDefault()

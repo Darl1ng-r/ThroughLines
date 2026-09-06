@@ -8,6 +8,8 @@ services:
       args:
         VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+        VITE_APP_URL: ${VITE_APP_URL}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
     container_name: throughlines_app
     ports:
       - "80:8080"
@@ -21,11 +23,18 @@ services:
   redis:
     image: redis:7-alpine
     container_name: throughlines_redis
-    ports:
-      - "6379:6379"
+    # Do NOT expose Redis port publicly — internal Docker network access only.
+    # Only uncomment the line below for local debugging.
+    # ports:
+    #   - "127.0.0.1:6379:6379"
+    command: redis-server --save 60 1 --loglevel warning
     volumes:
       - redis_data:/data
     restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 256M
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 30s
@@ -34,4 +43,3 @@ services:
 
 volumes:
   redis_data:
-

@@ -173,10 +173,12 @@ export default function Dashboard() {
   const PAGE_SIZE = 20
 
   useEffect(() => {
+    document.title = 'Dashboard — Throughline'
     if (user) {
       fetchTopics()
     }
   }, [user])
+
 
   useEffect(() => {
     if (selectedId) {

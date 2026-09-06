@@ -1,0 +1,14 @@
+User-agent: *
+
+# Private application routes — do not index
+Disallow: /dashboard
+Disallow: /settings
+
+# Allow public content
+Allow: /
+Allow: /discover
+Allow: /
+
+# Public user profiles and topic pages are allowed by default
+
+Sitemap: https://throughline.app/sitemap.xml
