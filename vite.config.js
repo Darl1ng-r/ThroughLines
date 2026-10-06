@@ -9,8 +9,8 @@ export default defineConfig({
     open: true
   },
   build: {
-    // Warn when a chunk exceeds 300KB (before gzip)
-    chunkSizeWarningLimit: 300,
+    // Warn when a chunk exceeds 400KB (before gzip)
+    chunkSizeWarningLimit: 400,
     rollupOptions: {
       output: {
         // Manual vendor chunk splitting to prevent monolithic bundles

@@ -4,16 +4,16 @@ import { useAuth } from '../context/AuthContext'
 import { Settings as SettingsIcon, Save, ArrowLeft } from 'lucide-react'
 
 const tokens = {
-  paper: "#F1EEE4",
-  paperDeep: "#E8E3D5",
-  card: "#FBF9F3",
-  ink: "#211F1B",
-  inkSoft: "#6B6459",
-  inkFaint: "#9C9587",
-  pine: "#2F4A3D",
-  pineSoft: "#E3E9E0",
-  line: "#D9D2C0",
-  danger: "#8C4A3A",
+  paper: "var(--color-paper)",
+  paperDeep: "var(--color-paper-deep)",
+  card: "var(--color-card)",
+  ink: "var(--color-ink)",
+  inkSoft: "var(--color-ink-soft)",
+  inkFaint: "var(--color-ink-faint)",
+  pine: "var(--color-pine)",
+  pineSoft: "var(--color-pine-soft)",
+  line: "var(--color-line)",
+  danger: "var(--color-danger)",
 }
 
 export default function Settings() {

@@ -5,20 +5,20 @@ import { checkPasswordBreached } from '../services/passwordSecurityService'
 import { ShieldCheck, LogIn, UserPlus, AlertCircle } from 'lucide-react'
 
 const tokens = {
-  paper: "#F1EEE4",
-  paperDeep: "#E8E3D5",
-  card: "#FBF9F3",
-  ink: "#211F1B",
-  inkSoft: "#6B6459",
-  inkFaint: "#9C9587",
-  pine: "#2F4A3D",
-  pineSoft: "#E3E9E0",
-  plum: "#4B3B5C",
-  plumSoft: "#EAE3EE",
-  ember: "#AD6330",
-  emberSoft: "#F3E5D8",
-  line: "#D9D2C0",
-  danger: "#8C4A3A",
+  paper: "var(--color-paper)",
+  paperDeep: "var(--color-paper-deep)",
+  card: "var(--color-card)",
+  ink: "var(--color-ink)",
+  inkSoft: "var(--color-ink-soft)",
+  inkFaint: "var(--color-ink-faint)",
+  pine: "var(--color-pine)",
+  pineSoft: "var(--color-pine-soft)",
+  plum: "var(--color-plum)",
+  plumSoft: "var(--color-plum-soft)",
+  ember: "var(--color-ember)",
+  emberSoft: "var(--color-ember-soft)",
+  line: "var(--color-line)",
+  danger: "var(--color-danger)",
 }
 
 // Lockout config: block after 5 consecutive failures for 30 seconds

@@ -1,7 +1,9 @@
-const CACHE_NAME = 'throughlines-v2'
+const CACHE_NAME = 'throughlines-v3'
 
-// Only pre-cache the bare minimum shell assets
+// Pre-cache the bare minimum shell assets for offline availability
 const SHELL_ASSETS = [
+  '/',
+  '/index.html',
   '/manifest.webmanifest',
 ]
 
@@ -36,7 +38,9 @@ function shouldBypassCache(request) {
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(SHELL_ASSETS)
+      return cache.addAll(SHELL_ASSETS).catch((err) => {
+        console.warn('SW shell pre-cache non-blocking error:', err)
+      })
     })
   )
   self.skipWaiting()
@@ -64,11 +68,24 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Network-first strategy for HTML navigation (ensures fresh app shell)
+  // Network-first strategy for HTML navigation (ensures fresh app shell, with offline fallback)
   const url = new URL(event.request.url)
   if (event.request.mode === 'navigate' || url.pathname === '/') {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match('/index.html'))
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const clone = networkResponse.clone()
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put('/index.html', clone)
+            })
+          }
+          return networkResponse
+        })
+        .catch(async () => {
+          const cached = await caches.match('/index.html')
+          return cached || caches.match('/')
+        })
     )
     return
   }

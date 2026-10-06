@@ -10,6 +10,7 @@ services:
         VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
         VITE_APP_URL: ${VITE_APP_URL}
         VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN}
     container_name: throughlines_app
     ports:
       - "80:8080"

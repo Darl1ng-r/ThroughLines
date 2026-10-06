@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../services/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import ConfidenceChart from '../components/ConfidenceChart'
+const ConfidenceChart = lazy(() => import('../components/ConfidenceChart'))
 import ErrorBoundary from '../components/ErrorBoundary'
 import { ArrowLeft, Send } from 'lucide-react'
 
@@ -291,7 +291,9 @@ export default function TopicDetail() {
             Trajectory chart temporarily unavailable.
           </div>
         }>
-          <ConfidenceChart entries={chartEntries} onSelectEntry={handleSelectEntry} selectedEntryId={selectedEntryId} />
+          <Suspense fallback={<div style={{ height: 160, background: tokens.paperDeep, borderRadius: 8, margin: "16px 0", opacity: 0.5 }} />}>
+            <ConfidenceChart entries={chartEntries} onSelectEntry={handleSelectEntry} selectedEntryId={selectedEntryId} />
+          </Suspense>
         </ErrorBoundary>
 
         {/* Timeline List */}
