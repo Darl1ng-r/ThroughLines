@@ -45,28 +45,46 @@ class SupabaseAdapter:
             self._live_push(agents)
 
     def _export_sql(self, agents: List[Any], target_path: Path):
-        """Generates idempotent PostgreSQL insert statements."""
+        """Generates idempotent PostgreSQL insert statements compatible with Supabase auth.users & RLS."""
         lines = [
             "-- Throughlines Synthetic Community Seed Script",
             f"-- Generated on: {datetime.now(timezone.utc).isoformat()}",
-            "-- Compatible with Throughlines Production Database Schema\n",
-            "BEGIN;\n"
+            "-- Compatible with Throughlines Supabase Auth & Public Schema\n",
+            "BEGIN;\n",
+            "-- 1. Insert into auth.users so foreign key references in public.profiles succeed"
         ]
 
-        # 1. Profiles
-        lines.append("-- 1. Insert Synthetic Profiles")
         for a in agents:
-            # Generate deterministic UUID for auth user simulation
+            clean_name = a.display_name.replace("'", "''")
+            email = f"{a.username}@throughlines.internal"
+            lines.append(
+                f"INSERT INTO auth.users ("
+                f"  instance_id, id, aud, role, email, encrypted_password, "
+                f"  email_confirmed_at, recovery_sent_at, last_sign_in_at, "
+                f"  raw_app_meta_data, raw_user_meta_data, created_at, updated_at, "
+                f"  confirmation_token, email_change, email_change_token_new, recovery_token"
+                f") VALUES ("
+                f"  '00000000-0000-0000-0000-000000000000', '{a.id}', 'authenticated', 'authenticated', "
+                f"  '{email}', '', NOW(), NOW(), NOW(), "
+                f"  '{{\"provider\":\"email\",\"providers\":[\"email\"]}}', "
+                f"  '{{\"username\":\"{a.username}\",\"full_name\":\"{clean_name}\"}}', "
+                f"  NOW(), NOW(), '', '', '', ''"
+                f") ON CONFLICT (id) DO NOTHING;"
+            )
+
+        # 2. Profiles
+        lines.append("\n-- 2. Insert into public.profiles")
+        for a in agents:
             clean_bio = a.bio.replace("'", "''")
             clean_name = a.display_name.replace("'", "''")
             lines.append(
                 f"INSERT INTO public.profiles (id, username, display_name, bio) "
                 f"VALUES ('{a.id}', '{a.username}', '{clean_name}', '{clean_bio}') "
-                f"ON CONFLICT (id) DO UPDATE SET display_name = EXCLUDED.display_name, bio = EXCLUDED.bio;"
+                f"ON CONFLICT (id) DO UPDATE SET display_name = EXCLUDED.display_name, bio = EXCLUDED.bio, username = EXCLUDED.username;"
             )
 
-        # 2. Topics & Entries
-        lines.append("\n-- 2. Insert Topics & Public Posts")
+        # 3. Topics & Entries
+        lines.append("\n-- 3. Insert Topics & Public Posts")
         for a in agents:
             for slug, topic in a.active_topics.items():
                 clean_title = topic['title'].replace("'", "''")
