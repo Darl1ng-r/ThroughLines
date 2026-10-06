@@ -166,6 +166,7 @@ CREATE INDEX IF NOT EXISTS idx_topics_cooldown            ON public.topics (nudg
     WHERE nudge_cooldown_until IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_private_entries_topic_date ON public.private_entries (topic_id, entry_date DESC);
 CREATE INDEX IF NOT EXISTS idx_public_posts_feed          ON public.public_posts (moderation_status, entry_date DESC);
+CREATE INDEX IF NOT EXISTS idx_public_posts_topic_mod      ON public.public_posts (topic_id, moderation_status);
 CREATE INDEX IF NOT EXISTS idx_nudges_topic_id            ON public.nudges (topic_id);
 CREATE INDEX IF NOT EXISTS idx_nudges_created_at          ON public.nudges (created_at);
 

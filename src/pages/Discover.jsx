@@ -1,10 +1,15 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../services/supabaseClient'
 import { ArrowUpRight, Compass, Search, Bookmark, Share2, Sparkles, SlidersHorizontal, Activity } from 'lucide-react'
-import { getCache, setCache, invalidateCache } from '../services/redisCacheService'
+import { getCache, setCache, invalidateCache, getSyncCache } from '../services/redisCacheService'
 import { searchFeed } from '../services/semanticSearchService'
 import { computeMacroBeliefTrends } from '../services/sparkAnalyticsEngine'
+
+// Preload ConfidenceChart bundle ahead of user click
+const preloadConfidenceChart = () => {
+  import('../components/ConfidenceChart').catch(() => {})
+}
 
 const tokens = {
   paper: "var(--color-paper)",
@@ -22,8 +27,9 @@ const tokens = {
 
 export default function Discover() {
   const navigate = useNavigate()
-  const [topics, setTopics] = useState([])
-  const [loading, setLoading] = useState(true)
+  const cachedInitial = getSyncCache('discover_feed_cursor_null')
+  const [topics, setTopics] = useState(cachedInitial || [])
+  const [loading, setLoading] = useState(!cachedInitial || cachedInitial.length === 0)
   const [searchQuery, setSearchQuery] = useState("")
   const [feedTab, setFeedTab] = useState("all") // "all" | "bookmarked"
   const [algoMode, setAlgoMode] = useState("smart") // "smart" | "evolved" | "recent" | "conviction" | "questioning"
@@ -53,6 +59,12 @@ export default function Discover() {
   useEffect(() => {
     document.title = 'Discover — Throughline'
     fetchDiscoverFeed(null, true, searchQuery)
+    // Preload chart bundle during browser idle
+    if (typeof requestIdleCallback !== 'undefined') {
+      requestIdleCallback(preloadConfidenceChart)
+    } else {
+      setTimeout(preloadConfidenceChart, 500)
+    }
 
     // Real-Time WebSocket Listener for live public posts
     const channel = supabase
@@ -72,8 +84,13 @@ export default function Discover() {
     }
   }, [])
 
-  // Server-side debounced search query trigger
+  // Guard against duplicate fetch on initial mount while supporting debounced search
+  const isSearchMountedRef = useRef(false)
   useEffect(() => {
+    if (!isSearchMountedRef.current) {
+      isSearchMountedRef.current = true
+      return
+    }
     const timer = setTimeout(() => {
       setLastCursor(null)
       fetchDiscoverFeed(null, true, searchQuery)
@@ -106,14 +123,31 @@ export default function Discover() {
     triggerToast("Link & snippet copied to clipboard!")
   }
 
+  function handleOpenTopic(topic) {
+    navigate(`/${topic.profiles?.username}/${topic.slug}`, {
+      state: {
+        initialTopic: topic,
+        initialProfile: topic.profiles,
+        from: 'discover'
+      }
+    })
+  }
+
   async function fetchDiscoverFeed(cursor = null, isInitial = false, query = searchQuery) {
     try {
       const cleanQuery = (query || '').trim()
 
       if (isInitial) {
-        setLoading(true)
-        if (!cleanQuery) {
-          const cacheKey = `discover_feed_cursor_${cursor || 'null'}`
+        const cacheKey = `discover_feed_cursor_${cursor || 'null'}`
+        const syncCached = !cleanQuery ? getSyncCache(cacheKey) : null
+        if (syncCached && Array.isArray(syncCached) && syncCached.length > 0) {
+          setTopics(syncCached)
+          setLoading(false)
+        } else {
+          setLoading(true)
+        }
+
+        if (!cleanQuery && !syncCached) {
           const cached = await getCache(cacheKey)
           if (cached && Array.isArray(cached) && cached.length > 0) {
             setTopics(cached)
@@ -450,11 +484,12 @@ export default function Discover() {
                 <div 
                   key={topic.id} 
                   className="tl-entry"
+                  onMouseEnter={preloadConfidenceChart}
                   style={{ 
                     background: tokens.card, 
                     border: `1px solid ${tokens.line}`, 
                     borderRadius: 10, 
-                    padding: "16px 18px",
+                    padding: "16px 18px", 
                     boxShadow: "0 2px 8px rgba(33, 31, 27, 0.02)"
                   }}
                 >
@@ -468,9 +503,9 @@ export default function Discover() {
                           color: tokens.pine, 
                           background: "none", 
                           border: "none", 
-                          cursor: "pointer",
-                          fontWeight: 600,
-                          padding: 0
+                          cursor: "pointer", 
+                          fontWeight: 600, 
+                          padding: 0 
                         }}
                       >
                         @{topic.profiles?.username || 'anonymous'}
@@ -482,8 +517,8 @@ export default function Discover() {
                           padding: "2px 7px", 
                           borderRadius: 999, 
                           background: tokens.paperDeep, 
-                          color: tokens.inkSoft,
-                          fontWeight: 500
+                          color: tokens.inkSoft, 
+                          fontWeight: 500 
                         }}
                       >
                         {topic.badge}
@@ -512,10 +547,10 @@ export default function Discover() {
                       fontSize: 18, 
                       fontWeight: 600, 
                       margin: "0 0 8px", 
-                      cursor: "pointer",
-                      color: tokens.ink
+                      cursor: "pointer", 
+                      color: tokens.ink 
                     }}
-                    onClick={() => navigate(`/${topic.profiles?.username}/${topic.slug}`)}
+                    onClick={() => handleOpenTopic(topic)}
                   >
                     {topic.title}
                   </h3>
@@ -546,7 +581,7 @@ export default function Discover() {
                       </button>
 
                       <button 
-                        onClick={() => navigate(`/${topic.profiles?.username}/${topic.slug}`)} 
+                        onClick={() => handleOpenTopic(topic)} 
                         className="tl-focus flex items-center gap-1 btn-premium" 
                         style={{ 
                           border: "none", 

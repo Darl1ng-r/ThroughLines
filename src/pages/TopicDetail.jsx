@@ -1,10 +1,10 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../services/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 const ConfidenceChart = lazy(() => import('../components/ConfidenceChart'))
 import ErrorBoundary from '../components/ErrorBoundary'
-import { ArrowLeft, Send } from 'lucide-react'
+import { ArrowLeft, Send, User } from 'lucide-react'
 
 import MarkdownText from '../components/MarkdownText'
 
@@ -38,12 +38,17 @@ function Meter({ value }) {
 export default function TopicDetail() {
   const { username, topicSlug } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { profile: currentProfile, user } = useAuth()
 
-  const [profile, setProfile] = useState(null)
-  const [topic, setTopic] = useState(null)
-  const [posts, setPosts] = useState([])
-  const [loading, setLoading] = useState(true)
+  // Instant hydration from Discover navigation state if available
+  const initialTopic = location.state?.initialTopic
+  const initialProfile = location.state?.initialProfile || location.state?.initialTopic?.profiles
+
+  const [profile, setProfile] = useState(initialProfile || null)
+  const [topic, setTopic] = useState(initialTopic || null)
+  const [posts, setPosts] = useState(initialTopic?.public_posts || [])
+  const [loading, setLoading] = useState(!initialTopic)
   const [error, setError] = useState("")
   const [toastMsg, setToastMsg] = useState("")
   const [selectedEntryId, setSelectedEntryId] = useState(null)
@@ -61,55 +66,60 @@ export default function TopicDetail() {
   }
 
   useEffect(() => {
-    fetchTopicData()
+    fetchTopicData(Boolean(initialTopic))
   }, [username, topicSlug])
 
-  async function fetchTopicData() {
+  async function fetchTopicData(isBackground = false) {
     try {
-      setLoading(true)
+      if (!isBackground) setLoading(true)
       setError("")
 
-      const { data: profileData, error: profileErr } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('username', username)
-        .maybeSingle()
-
-      if (profileErr) throw profileErr
-      if (!profileData) {
-        setError("User profile not found")
-        setLoading(false)
-        return
-      }
-      setProfile(profileData)
-
-      const { data: topicData, error: topicErr } = await supabase
+      // Consolidated single query joining topics, profiles, and public_posts
+      const { data, error: queryErr } = await supabase
         .from('topics')
-        .select('*')
+        .select(`
+          id,
+          title,
+          slug,
+          user_id,
+          created_at,
+          profiles!inner (
+            id,
+            username,
+            display_name,
+            bio,
+            avatar_url
+          ),
+          public_posts (
+            id,
+            content,
+            confidence_rating,
+            entry_date,
+            moderation_status
+          )
+        `)
         .eq('slug', topicSlug)
-        .eq('user_id', profileData.id)
+        .eq('profiles.username', username)
+        .order('entry_date', { foreignTable: 'public_posts', ascending: true })
         .maybeSingle()
 
-      if (topicErr) throw topicErr
-      if (!topicData) {
-        setError("Throughline topic not found")
-        setLoading(false)
+      if (queryErr) throw queryErr
+      if (!data) {
+        if (!isBackground) {
+          setError("Throughline topic not found")
+        }
         return
       }
-      setTopic(topicData)
 
-      const { data: postsData, error: postsErr } = await supabase
-        .from('public_posts')
-        .select('*')
-        .eq('topic_id', topicData.id)
-        .eq('moderation_status', 'approved')
-        .order('entry_date', { ascending: true })
-
-      if (postsErr) throw postsErr
-      setPosts(postsData || [])
+      setProfile(data.profiles)
+      setTopic(data)
+      const approvedPosts = (data.public_posts || []).filter(p => p.moderation_status === 'approved')
+      setPosts(approvedPosts)
     } catch (err) {
       console.error('Error fetching topic detail:', err)
-      setError("An error occurred loading the throughline.")
+      if (!isBackground) {
+        setError("An error occurred loading the throughline.")
+      }
     } finally {
       setLoading(false)
     }
@@ -221,13 +231,34 @@ export default function TopicDetail() {
   return (
     <div className="tl-scroll" style={{ flex: 1, overflowY: "auto", maxHeight: "calc(100vh - 58px)" }}>
       <div style={{ maxWidth: 640, margin: "0 auto", padding: "28px 24px 80px" }}>
-        <button 
-          onClick={() => navigate(`/${username}`)} 
-          className="tl-focus flex items-center gap-1 btn-premium" 
-          style={{ background: "transparent", border: "none", color: tokens.inkSoft, cursor: "pointer", fontSize: 13, marginBottom: 20, padding: 0 }}
-        >
-          <ArrowLeft size={14} /> Back to @{username}'s profile
-        </button>
+        <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: 20 }}>
+          <button 
+            onClick={() => navigate('/discover')} 
+            className="tl-focus flex items-center gap-1.5 btn-premium" 
+            style={{ background: "transparent", border: "none", color: tokens.inkSoft, cursor: "pointer", fontSize: 13, padding: 0 }}
+          >
+            <ArrowLeft size={14} /> Back to Discover
+          </button>
+
+          <button
+            onClick={() => navigate(`/${username}`)}
+            className="tl-focus btn-premium flex items-center gap-1.5"
+            style={{
+              background: tokens.paperDeep,
+              border: `1px solid ${tokens.line}`,
+              borderRadius: 999,
+              padding: "4px 12px",
+              fontSize: 12,
+              color: tokens.ink,
+              cursor: "pointer"
+            }}
+            title={`View ${profile?.display_name || username}'s full profile`}
+          >
+            <User size={13} color={tokens.pine} />
+            <span style={{ fontWeight: 500 }}>@{username}</span>
+            <span style={{ fontSize: 11, color: tokens.inkFaint }}>profile →</span>
+          </button>
+        </div>
 
         {isSelf && (
           <div 
@@ -245,9 +276,18 @@ export default function TopicDetail() {
           </div>
         )}
 
-        <p className="tl-mono" style={{ fontSize: 12, color: tokens.inkFaint, marginBottom: 4 }}>
-          @{username}
-        </p>
+        <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
+          <button 
+            onClick={() => navigate(`/${username}`)}
+            className="tl-mono tl-focus" 
+            style={{ fontSize: 12, color: tokens.pine, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 600 }}
+          >
+            @{username}
+          </button>
+          {profile?.display_name && (
+            <span style={{ fontSize: 12, color: tokens.inkSoft }}>• {profile.display_name}</span>
+          )}
+        </div>
         <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: 24 }}>
           <div>
             <h1 className="tl-display" style={{ fontSize: 28, fontWeight: 600, margin: "0 0 4px", color: tokens.ink }}>

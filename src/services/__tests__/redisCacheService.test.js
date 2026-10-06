@@ -1,14 +1,16 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { getCache, setCache, invalidateCache, checkRateLimit } from '../redisCacheService'
+import { getCache, getSyncCache, setCache, invalidateCache, checkRateLimit } from '../redisCacheService'
 
 describe('redisCacheService', () => {
   beforeEach(async () => {
     await invalidateCache('test_key')
   })
 
-  it('sets and retrieves cached values within TTL', async () => {
+  it('sets and retrieves cached values within TTL synchronously and asynchronously', async () => {
     const data = { topicsCount: 42, feed: ['a', 'b', 'c'] }
     await setCache('test_key', data, 10)
+
+    const syncCached = getSyncCache('test_key')
+    expect(syncCached).toEqual(data)
 
     const cached = await getCache('test_key')
     expect(cached).toEqual(data)

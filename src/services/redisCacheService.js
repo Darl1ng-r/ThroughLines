@@ -24,6 +24,23 @@ const isTestEnv = import.meta.env.MODE === 'test'
 const PROXY_CACHE_URL = isTestEnv ? null : (import.meta.env.VITE_REDIS_PROXY_URL || null)
 
 /**
+ * Retrieve cached value synchronously from L1 in-memory cache if not expired.
+ * @param {string} key
+ * @returns {any|null}
+ */
+export function getSyncCache(key) {
+  if (!key) return null
+  const entry = memoryCache.get(key)
+  if (entry) {
+    if (Date.now() <= entry.expiry) {
+      return entry.value
+    }
+    memoryCache.delete(key)
+  }
+  return null
+}
+
+/**
  * Retrieve cached value by key.
  * @param {string} key
  * @returns {Promise<any|null>}
