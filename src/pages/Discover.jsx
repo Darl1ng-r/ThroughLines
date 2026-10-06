@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../services/supabaseClient'
-import { ArrowUpRight, Compass, Search, Bookmark, Share2, Sparkles, SlidersHorizontal, Activity } from 'lucide-react'
+import { ArrowUpRight, Compass, Search, Bookmark, Share2 } from 'lucide-react'
 import { getCache, setCache, invalidateCache, getSyncCache } from '../services/redisCacheService'
 import { searchFeed } from '../services/semanticSearchService'
-import { computeMacroBeliefTrends } from '../services/sparkAnalyticsEngine'
 
 // Preload ConfidenceChart bundle ahead of user click
 const preloadConfidenceChart = () => {
@@ -32,8 +31,6 @@ export default function Discover() {
   const [loading, setLoading] = useState(!cachedInitial || cachedInitial.length === 0)
   const [searchQuery, setSearchQuery] = useState("")
   const [feedTab, setFeedTab] = useState("all") // "all" | "bookmarked"
-  const [algoMode, setAlgoMode] = useState("smart") // "smart" | "evolved" | "recent" | "conviction" | "questioning"
-  const [macroTrends, setMacroTrends] = useState(null)
   const [bookmarks, setBookmarks] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem('tl_bookmarks') || '[]')
@@ -42,12 +39,6 @@ export default function Discover() {
     }
   })
   const [toastMsg, setToastMsg] = useState("")
-
-  useEffect(() => {
-    if (topics.length > 0) {
-      computeMacroBeliefTrends(topics).then(res => setMacroTrends(res))
-    }
-  }, [topics])
 
   // Cursor-based pagination state
   const [lastCursor, setLastCursor] = useState(null)  // created_at of last fetched topic
@@ -217,16 +208,6 @@ export default function Discover() {
           const daysAgo = Math.max(0, (now.getTime() - lastDate.getTime()) / (1000 * 3600 * 24))
           const decay = 1 / Math.pow(1 + daysAgo, 0.75)
 
-          // Mindscape Score calculation
-          const score = (10 * Math.log(1 + sortedPosts.length) + 0.6 * delta + (bookmarks.includes(t.id) ? 15 : 0)) * decay
-
-          // Badge determination
-          let badge = "💡 Evolving Mind"
-          if (daysAgo <= 2) badge = "🆕 Fresh Thought"
-          else if (delta >= 25) badge = "🔥 High Evolution"
-          else if (sortedPosts.length >= 4) badge = "🌿 Deep Journey"
-          else if (delta >= 15) badge = "⚡ Shifted Mindset"
-
           return {
             ...t,
             public_posts: sortedPosts,
@@ -234,9 +215,7 @@ export default function Discover() {
             firstConfidence,
             latestConfidence,
             delta,
-            score,
             daysAgo,
-            badge,
             span: `${sortedPosts.length} ${sortedPosts.length === 1 ? 'entry' : 'entries'}`
           }
         })
@@ -281,27 +260,14 @@ export default function Discover() {
     return searchFeed(tabFiltered, searchQuery)
   }, [tabFiltered, searchQuery])
 
-  // 3. Sort feed using selected algorithm mode
+  // 3. Sort feed chronologically by most recent update
   const sortedFeed = useMemo(() => {
     return [...filteredFeed].sort((a, b) => {
-      if (algoMode === "smart") {
-        return b.score - a.score
-      }
-      if (algoMode === "evolved") {
-        return b.delta - a.delta || b.public_posts.length - a.public_posts.length
-      }
-      if (algoMode === "recent") {
-        return new Date(b.latestPost.entry_date) - new Date(a.latestPost.entry_date)
-      }
-      if (algoMode === "conviction") {
-        return b.latestConfidence - a.latestConfidence
-      }
-      if (algoMode === "questioning") {
-        return a.latestConfidence - b.latestConfidence
-      }
-      return 0
+      const dateA = new Date(a.latestPost?.entry_date || a.created_at)
+      const dateB = new Date(b.latestPost?.entry_date || b.created_at)
+      return dateB - dateA
     })
-  }, [filteredFeed, algoMode])
+  }, [filteredFeed])
 
   return (
     <div className="tl-scroll" style={{ flex: 1, overflowY: "auto", maxHeight: "calc(100vh - 58px)" }}>
@@ -357,82 +323,30 @@ export default function Discover() {
           Other people's evolving thoughts, out in the open.
         </p>
 
-        {/* Spark Macro Belief Trends Banner */}
-        {macroTrends && macroTrends.totalTopics > 0 && (
-          <div className="flex items-center justify-between flex-wrap gap-2 animate-fade-in" style={{ background: tokens.card, border: `1px solid ${tokens.line}`, borderRadius: 10, padding: "10px 16px", marginBottom: 24 }}>
-            <div className="flex items-center gap-2">
-              <Activity size={15} color={tokens.pine} />
-              <span className="tl-mono" style={{ fontSize: 12, fontWeight: 600, color: tokens.pine }}>
-                Apache Spark Macro Trends:
-              </span>
-              <span className="tl-mono" style={{ fontSize: 12, color: tokens.inkSoft }}>
-                Avg Shift: <strong>{macroTrends.avgShift}%</strong> | Velocity: <strong>{macroTrends.macroVelocity}</strong> | Volatility: <strong>±{macroTrends.macroVolatility}</strong>
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Search & Algorithm Controls */}
-        <div className="flex flex-col gap-3" style={{ marginBottom: 28 }}>
-          <div style={{ position: 'relative' }}>
-            <Search 
-              size={16} 
-              color={tokens.inkFaint} 
-              style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} 
-            />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search topics, content, or writers..."
-              className="tl-focus tl-input"
-              style={{
-                width: "100%",
-                padding: "10px 12px 10px 38px",
-                borderRadius: 8,
-                border: `1px solid ${tokens.line}`,
-                background: tokens.card,
-                color: tokens.ink,
-                fontSize: 14,
-                fontFamily: "inherit"
-              }}
-            />
-          </div>
-
-          {/* Algorithm Mode Switcher */}
-          <div className="flex items-center gap-2 flex-wrap" style={{ background: tokens.card, border: `1px solid ${tokens.line}`, borderRadius: 8, padding: "6px 12px" }}>
-            <div className="flex items-center gap-1.5 tl-mono" style={{ fontSize: 11, color: tokens.pine, fontWeight: 600 }}>
-              <Sparkles size={13} color={tokens.pine} /> Mindscape Algorithm:
-            </div>
-            
-            <div className="flex items-center gap-1 flex-wrap flex-1 justify-end">
-              {[
-                { id: "smart", label: "✨ Smart Feed" },
-                { id: "evolved", label: "⚡ Most Evolved" },
-                { id: "recent", label: "⏱️ Fresh Updates" },
-                { id: "conviction", label: "🎯 High Conviction" },
-                { id: "questioning", label: "🤔 Questioning" },
-              ].map(opt => (
-                <button
-                  key={opt.id}
-                  onClick={() => setAlgoMode(opt.id)}
-                  className="tl-focus"
-                  style={{
-                    padding: "3px 9px",
-                    borderRadius: 6,
-                    border: "none",
-                    fontSize: 11,
-                    fontWeight: algoMode === opt.id ? 600 : 400,
-                    cursor: "pointer",
-                    background: algoMode === opt.id ? tokens.pineSoft : "transparent",
-                    color: algoMode === opt.id ? tokens.pine : tokens.inkSoft,
-                  }}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
+        {/* Search Bar */}
+        <div style={{ position: 'relative', marginBottom: 24 }}>
+          <Search 
+            size={16} 
+            color={tokens.inkFaint} 
+            style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} 
+          />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search topics, content, or writers..."
+            className="tl-focus tl-input"
+            style={{
+              width: "100%",
+              padding: "10px 12px 10px 38px",
+              borderRadius: 8,
+              border: `1px solid ${tokens.line}`,
+              background: tokens.card,
+              color: tokens.ink,
+              fontSize: 14,
+              fontFamily: "inherit"
+            }}
+          />
         </div>
 
         {/* Real-time WebSocket New Updates Banner */}
@@ -441,8 +355,8 @@ export default function Discover() {
             <button
               onClick={() => {
                 setNewUpdatesCount(0)
-                setFeedPage(0)
-                fetchDiscoverFeed(0, true)
+                setLastCursor(null)
+                fetchDiscoverFeed(null, true)
               }}
               className="tl-focus btn-premium flex items-center justify-center gap-1 animate-fade-in"
               style={{
@@ -510,19 +424,6 @@ export default function Discover() {
                       >
                         @{topic.profiles?.username || 'anonymous'}
                       </button>
-                      <span 
-                        className="tl-mono" 
-                        style={{ 
-                          fontSize: 10, 
-                          padding: "2px 7px", 
-                          borderRadius: 999, 
-                          background: tokens.paperDeep, 
-                          color: tokens.inkSoft, 
-                          fontWeight: 500 
-                        }}
-                      >
-                        {topic.badge}
-                      </span>
                     </div>
 
                     <div className="flex items-center gap-3">

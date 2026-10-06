@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import React from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import Dashboard from '../Dashboard'
 import * as AuthContext from '../../context/AuthContext'
 import { supabase } from '../../services/supabaseClient'
@@ -73,7 +73,7 @@ describe('Dashboard Component', () => {
     })
   })
 
-  it('renders without throwing ReferenceError for TopicSidebar, TimelineItem, or EntryComposer', async () => {
+  it('renders workspace, shows topic title in EntryComposer, and does NOT render AI Evolution Synthesis', async () => {
     render(<Dashboard />)
 
     // Verify TopicSidebar rendered the topic
@@ -81,14 +81,26 @@ describe('Dashboard Component', () => {
       expect(screen.getAllByText('Philosophy of Mind').length).toBeGreaterThan(0)
     })
 
-    // Verify EntryComposer rendered
+    // Verify EntryComposer rendered and displays topic title
     await waitFor(() => {
       expect(screen.getByPlaceholderText(/Why do you believe that/i)).toBeDefined()
+      expect(screen.getByText(/• Philosophy of Mind/i)).toBeDefined()
     })
 
     // Verify TimelineItem rendered the entry
     await waitFor(() => {
       expect(screen.getByText('Testing initial premise')).toBeDefined()
     })
+
+    // Verify AI Evolution Synthesis is completely removed
+    expect(screen.queryByText(/AI Evolution Synthesis/i)).toBeNull()
+    expect(screen.queryByText(/AI Perspective Evolution Synthesis/i)).toBeNull()
+
+    // Verify "+ New" input has explicit ink color styling
+    const newBtn = screen.getByText(/New/i).closest('button')
+    fireEvent.click(newBtn)
+    const topicInput = screen.getByPlaceholderText(/e.g. AGI Alignment/i)
+    expect(topicInput).toBeDefined()
+    expect(topicInput.style.color).toBe('var(--color-ink)')
   })
 })

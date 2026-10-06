@@ -71,6 +71,16 @@ body {
 }
 
 /* Focus and inputs */
+input, textarea, select {
+  color: var(--color-ink);
+  font-family: inherit;
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--color-ink-faint);
+  opacity: 0.8;
+}
+
 .tl-focus:focus-visible {
   outline: 2px solid var(--color-pine);
   outline-offset: 2px;

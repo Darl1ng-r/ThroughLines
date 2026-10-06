@@ -8,7 +8,6 @@ import MarkdownText from '../components/MarkdownText'
 import TopicSidebar from '../components/dashboard/TopicSidebar'
 import EntryComposer from '../components/dashboard/EntryComposer'
 import TimelineItem from '../components/dashboard/TimelineItem'
-import { generatePerspectiveSynthesis } from '../services/aiSynthesisService'
 import { getDraft, saveDraft, removeDraft } from '../services/draftStorage'
 import { publishEvent, EVENTS } from '../services/eventBusService'
 import { sendNativeNotification, requestNotificationPermission } from '../services/notificationService'
@@ -117,13 +116,11 @@ export default function Dashboard() {
   
   const [toastMsg, setToastMsg] = useState("")
 
-  // Filtering & Search & Synthesis
+  // Filtering & Search
   const [entrySearch, setEntrySearch] = useState("")
   const [filterVisibility, setFilterVisibility] = useState("ALL")
   const [showShareModal, setShowShareModal] = useState(false)
   const [selectedEntryId, setSelectedEntryId] = useState(null)
-  const [showSynthesis, setShowSynthesis] = useState(false)
-  const [synthesis, setSynthesis] = useState(null)
 
   function handleSelectEntry(id) {
     setSelectedEntryId(id)
@@ -695,23 +692,6 @@ export default function Dashboard() {
 
               {/* Action Toolbar */}
               <div className="flex items-center gap-2 flex-wrap no-print">
-                {entries.length > 0 && (
-                  <button 
-                    onClick={() => {
-                      if (!synthesis) {
-                        const synth = generatePerspectiveSynthesis(selectedTopic.title, entries)
-                        setSynthesis(synth)
-                      }
-                      setShowSynthesis(prev => !prev)
-                    }} 
-                    className="tl-focus btn-premium flex items-center gap-1"
-                    title="Synthesize belief evolution with AI"
-                    style={{ padding: "6px 12px", borderRadius: 8, border: `1px solid ${tokens.plum}`, background: tokens.plumSoft, color: tokens.plum, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-                  >
-                    <Sparkles size={13} /> {showSynthesis ? "Hide Synthesis" : "AI Evolution Synthesis"}
-                  </button>
-                )}
-
                 <button 
                   onClick={exportMarkdown} 
                   className="tl-focus btn-premium flex items-center gap-1"
@@ -740,52 +720,6 @@ export default function Dashboard() {
                 </button>
               </div>
             </div>
-
-            {/* AI Evolution Synthesis Card */}
-            {showSynthesis && synthesis && (
-              <div 
-                className="animate-fade-in"
-                style={{ 
-                  background: tokens.card, 
-                  border: `1.5px solid ${tokens.plum}`, 
-                  borderRadius: 12, 
-                  padding: "16px 20px", 
-                  marginBottom: 20, 
-                  boxShadow: "0 6px 20px rgba(75,59,92,0.08)" 
-                }}
-              >
-                <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
-                  <div className="flex items-center gap-2" style={{ color: tokens.plum, fontWeight: 600, fontSize: 14 }}>
-                    <Sparkles size={16} />
-                    <span>AI Perspective Evolution Synthesis</span>
-                  </div>
-                  <span className="tl-mono" style={{ fontSize: 11, padding: "2px 8px", borderRadius: 999, background: tokens.plumSoft, color: tokens.plum, fontWeight: 600 }}>
-                    Stability: {synthesis.stabilityScore}%
-                  </span>
-                </div>
-
-                <p style={{ fontSize: 13.5, lineHeight: 1.6, color: tokens.ink, margin: "0 0 12px" }}>
-                  {synthesis.summary}
-                </p>
-
-                {synthesis.themes.length > 0 && (
-                  <div className="flex items-center gap-2 flex-wrap" style={{ marginBottom: 12 }}>
-                    <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint }}>Key Themes:</span>
-                    {synthesis.themes.map((t, idx) => (
-                      <span key={idx} className="tl-mono" style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: tokens.paperDeep, color: tokens.inkSoft }}>
-                        #{t}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {synthesis.reflectionPrompt && (
-                  <div style={{ background: tokens.paper, borderRadius: 8, padding: "10px 12px", borderLeft: `3px solid ${tokens.plum}`, fontSize: 12.5, fontStyle: 'italic', color: tokens.inkSoft }}>
-                    <strong>Reflection Prompt:</strong> "{synthesis.reflectionPrompt}"
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* Filter & Search Bar */}
             {entries.length > 0 && (
@@ -944,6 +878,7 @@ export default function Dashboard() {
                   setComposeVisibility={setComposeVisibility}
                   onAddEntry={addEntry}
                   submitting={submitting}
+                  topicTitle={selectedTopic?.title}
                 />
               </div>
             </div>

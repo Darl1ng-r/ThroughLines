@@ -23,17 +23,25 @@ const EntryComposer = memo(function EntryComposer({
   composeVisibility,
   setComposeVisibility,
   onAddEntry,
-  submitting = false
+  submitting = false,
+  topicTitle = ""
 }) {
   return (
     <div className="flex gap-4" style={{ position: "relative" }}>
       <div style={{ width: 12, height: 12, borderRadius: "50%", border: `2px dashed ${tokens.ember}`, marginTop: 6, flexShrink: 0 }} />
       <div style={{ flex: 1, background: tokens.card, border: `1px solid ${tokens.line}`, borderRadius: 10, padding: "16px 18px" }}>
-        <div className="flex items-center gap-1" style={{ marginBottom: 8, color: tokens.inkSoft }}>
-          <PenLine size={13} />
-          <span className="tl-mono" style={{ fontSize: 12 }}>
-            {entriesCount === 0 ? "First entry" : "Add another log"}
-          </span>
+        <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: 8 }}>
+          <div className="flex items-center gap-1.5" style={{ color: tokens.inkSoft }}>
+            <PenLine size={13} />
+            <span className="tl-mono" style={{ fontSize: 12 }}>
+              {entriesCount === 0 ? "First entry" : "Add another log"}
+            </span>
+            {topicTitle && (
+              <span className="tl-display" style={{ fontSize: 13, fontWeight: 600, color: tokens.ink, marginLeft: 4 }}>
+                • {topicTitle}
+              </span>
+            )}
+          </div>
         </div>
         
         <textarea
@@ -48,12 +56,14 @@ const EntryComposer = memo(function EntryComposer({
           style={{ 
             width: "100%", 
             resize: "none", 
-            border: "none", 
+            border: `1px solid ${tokens.line}`, 
+            borderRadius: 6,
+            padding: "8px 10px",
             outline: "none", 
             fontSize: 14.5, 
             lineHeight: 1.6, 
             fontFamily: "inherit", 
-            background: "transparent", 
+            background: tokens.paper, 
             color: tokens.ink, 
             marginBottom: 6,
             opacity: submitting ? 0.6 : 1 

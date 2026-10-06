@@ -102,7 +102,18 @@ const TopicSidebar = memo(function TopicSidebar({
             onChange={(e) => setNewTopicTitle(e.target.value)} 
             placeholder="e.g. AGI Alignment" 
             className="tl-focus"
-            style={{ width: "100%", padding: "6px 8px", borderRadius: 6, border: `1px solid ${tokens.line}`, fontSize: 13, marginBottom: 8, background: tokens.card }}
+            style={{ 
+              width: "100%", 
+              padding: "7px 10px", 
+              borderRadius: 6, 
+              border: `1px solid ${tokens.line}`, 
+              fontSize: 13, 
+              marginBottom: 8, 
+              background: tokens.card, 
+              color: tokens.ink, 
+              outline: "none", 
+              fontFamily: "inherit" 
+            }}
             autoFocus 
             onKeyDown={(e) => e.key === 'Enter' && onCreateTopic()}
           />
@@ -153,11 +164,14 @@ const TopicSidebar = memo(function TopicSidebar({
                     className="tl-focus"
                     style={{
                       flex: 1,
-                      padding: "4px 6px",
+                      padding: "4px 8px",
                       borderRadius: 4,
                       border: `1px solid ${tokens.line}`,
                       fontSize: 13,
-                      background: tokens.card
+                      background: tokens.card,
+                      color: tokens.ink,
+                      outline: "none",
+                      fontFamily: "inherit"
                     }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleSaveRename(t.id, e)

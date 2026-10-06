@@ -25,7 +25,6 @@ export function searchFeed(feedItems = [], query = '') {
     const titleLower = (item.title || '').toLowerCase()
     const authorLower = (item.profiles?.username || '').toLowerCase()
     const contentLower = (item.latestPost?.content || '').toLowerCase()
-    const badgeLower = (item.badge || '').toLowerCase()
 
     terms.forEach(term => {
       // 1. Exact title match (Highest Weight)
@@ -37,9 +36,6 @@ export function searchFeed(feedItems = [], query = '') {
 
       // 3. Content matching
       if (contentLower.includes(term)) relevanceScore += 10
-
-      // 4. Badge matching
-      if (badgeLower.includes(term)) relevanceScore += 5
 
       // 5. Fuzzy character overlap matching
       if (term.length >= 4) {
