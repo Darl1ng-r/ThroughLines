@@ -1,4 +1,4 @@
-const CACHE_NAME = 'throughlines-v3'
+const CACHE_NAME = 'throughlines-v4'
 
 // Pre-cache the bare minimum shell assets for offline availability
 const SHELL_ASSETS = [

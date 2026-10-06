@@ -37,13 +37,30 @@ async function initSentry() {
   }
 }
 
-// Service Worker registration
+// Service Worker handling:
+// In development, immediately unregister any active service worker and purge caches
+// to ensure the browser always receives fresh, un-cached code updates.
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(err =>
-      console.warn('Service worker registration failed:', err)
-    )
-  })
+  if (import.meta.env.DEV) {
+    navigator.serviceWorker.getRegistrations().then(registrations => {
+      for (const reg of registrations) {
+        reg.unregister()
+      }
+    })
+    if ('caches' in window) {
+      caches.keys().then(names => {
+        for (const name of names) {
+          caches.delete(name)
+        }
+      })
+    }
+  } else {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(err =>
+        console.warn('Service worker registration failed:', err)
+      )
+    })
+  }
 }
 
 initSentry().then(() => {
