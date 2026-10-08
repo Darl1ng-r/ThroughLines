@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS public.private_entries (
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     content TEXT NOT NULL CHECK (char_length(content) <= 5000),
     confidence_rating INT NOT NULL CHECK (confidence_rating >= 0 AND confidence_rating <= 100),
-    shift_reason TEXT DEFAULT NULL CHECK (shift_reason IS NULL OR shift_reason IN ('empirical_evidence', 'counter_argument', 'real_world_event', 'value_shift', 'introspective_review', 'other')),
+    shift_reason TEXT DEFAULT NULL CHECK (shift_reason IS NULL OR shift_reason IN ('empirical_evidence', 'empirical_data', 'counter_argument', 'real_world_event', 'value_shift', 'introspective_review', 'introspection', 'other')),
     entry_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS public.public_posts (
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     content TEXT NOT NULL CHECK (char_length(content) <= 5000),
     confidence_rating INT NOT NULL CHECK (confidence_rating >= 0 AND confidence_rating <= 100),
-    shift_reason TEXT DEFAULT NULL CHECK (shift_reason IS NULL OR shift_reason IN ('empirical_evidence', 'counter_argument', 'real_world_event', 'value_shift', 'introspective_review', 'other')),
+    shift_reason TEXT DEFAULT NULL CHECK (shift_reason IS NULL OR shift_reason IN ('empirical_evidence', 'empirical_data', 'counter_argument', 'real_world_event', 'value_shift', 'introspective_review', 'introspection', 'other')),
     moderation_status TEXT NOT NULL DEFAULT 'pending' CHECK (moderation_status IN ('pending', 'approved', 'flagged', 'rejected')),
     moderation_reason TEXT DEFAULT NULL,
     moderated_at TIMESTAMPTZ DEFAULT NOW(),

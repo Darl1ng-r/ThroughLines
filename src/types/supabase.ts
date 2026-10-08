@@ -6,6 +6,8 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+export type ShiftReason = 'empirical_evidence' | 'empirical_data' | 'counter_argument' | 'real_world_event' | 'value_shift' | 'introspective_review' | 'introspection' | 'other' | null
+
 export interface Database {
   public: {
     Tables: {
@@ -74,7 +76,7 @@ export interface Database {
           user_id: string
           content: string
           confidence_rating: number
-          shift_reason?: 'empirical_evidence' | 'counter_argument' | 'real_world_event' | 'value_shift' | 'introspective_review' | 'other' | null
+          shift_reason?: ShiftReason
           entry_date: string
           created_at?: string
         }
@@ -84,7 +86,7 @@ export interface Database {
           user_id: string
           content: string
           confidence_rating: number
-          shift_reason?: 'empirical_evidence' | 'counter_argument' | 'real_world_event' | 'value_shift' | 'introspective_review' | 'other' | null
+          shift_reason?: ShiftReason
           entry_date?: string
           created_at?: string
         }
@@ -94,7 +96,7 @@ export interface Database {
           user_id?: string
           content?: string
           confidence_rating?: number
-          shift_reason?: 'empirical_evidence' | 'counter_argument' | 'real_world_event' | 'value_shift' | 'introspective_review' | 'other' | null
+          shift_reason?: ShiftReason
           entry_date?: string
           created_at?: string
         }
@@ -107,7 +109,7 @@ export interface Database {
           user_id: string
           content: string
           confidence_rating: number
-          shift_reason?: 'empirical_evidence' | 'counter_argument' | 'real_world_event' | 'value_shift' | 'introspective_review' | 'other' | null
+          shift_reason?: ShiftReason
           moderation_status: 'pending' | 'approved' | 'flagged' | 'rejected'
           moderation_reason?: string | null
           moderated_at?: string | null
@@ -122,7 +124,7 @@ export interface Database {
           user_id: string
           content: string
           confidence_rating: number
-          shift_reason?: 'empirical_evidence' | 'counter_argument' | 'real_world_event' | 'value_shift' | 'introspective_review' | 'other' | null
+          shift_reason?: ShiftReason
           moderation_status?: 'pending' | 'approved' | 'flagged' | 'rejected'
           moderation_reason?: string | null
           moderated_at?: string | null

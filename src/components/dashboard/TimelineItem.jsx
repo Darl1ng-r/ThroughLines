@@ -20,10 +20,12 @@ const tokens = {
 
 const SHIFT_REASONS = {
   empirical_data: { label: 'Empirical Data' },
+  empirical_evidence: { label: 'Empirical Data' },
   counter_argument: { label: 'Counter-Argument' },
   real_world_event: { label: 'Real-World Event' },
   value_shift: { label: 'Value Shift' },
   introspection: { label: 'Introspection' },
+  introspective_review: { label: 'Introspection' },
 }
 
 function Meter({ value }) {

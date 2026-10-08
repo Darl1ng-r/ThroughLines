@@ -15,11 +15,13 @@ BEGIN
         ALTER TABLE public.private_entries 
             ADD COLUMN shift_reason TEXT DEFAULT NULL 
             CHECK (shift_reason IS NULL OR shift_reason IN (
-                'empirical_evidence', 
+                'empirical_evidence',
+                'empirical_data', 
                 'counter_argument', 
                 'real_world_event', 
                 'value_shift', 
-                'introspective_review', 
+                'introspective_review',
+                'introspection', 
                 'other'
             ));
     END IF;
@@ -31,11 +33,13 @@ BEGIN
         ALTER TABLE public.public_posts 
             ADD COLUMN shift_reason TEXT DEFAULT NULL 
             CHECK (shift_reason IS NULL OR shift_reason IN (
-                'empirical_evidence', 
+                'empirical_evidence',
+                'empirical_data', 
                 'counter_argument', 
                 'real_world_event', 
                 'value_shift', 
-                'introspective_review', 
+                'introspective_review',
+                'introspection', 
                 'other'
             ));
     END IF;
