@@ -5,6 +5,7 @@ import { ArrowUpRight, Compass, Search, Bookmark, Share2 } from 'lucide-react'
 import { getCache, setCache, invalidateCache, getSyncCache } from '../services/redisCacheService'
 import { searchFeed } from '../services/semanticSearchService'
 import MiniSparkline from '../components/MiniSparkline'
+import DiscoverWaves from '../components/DiscoverWaves'
 
 // Preload ConfidenceChart bundle ahead of user click
 const preloadConfidenceChart = () => {
@@ -335,8 +336,9 @@ export default function Discover() {
   }, [filteredFeed])
 
   return (
-    <div className="tl-scroll" style={{ flex: 1, overflowY: "auto", maxHeight: "calc(100vh - 58px)", position: "relative" }}>
+    <div className="tl-scroll" style={{ flex: 1, overflowY: "auto", maxHeight: "calc(100vh - 58px)", minHeight: 0, position: "relative" }}>
       <div className="tl-ambient-glow" aria-hidden="true" />
+      <DiscoverWaves />
       <div style={{ maxWidth: 660, margin: "0 auto", padding: "36px 24px 80px", position: "relative", zIndex: 1 }}>
         <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: 4 }}>
           <div className="flex items-center gap-2">

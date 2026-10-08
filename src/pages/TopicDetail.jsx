@@ -230,7 +230,8 @@ export default function TopicDetail() {
   }))
 
   return (
-    <div className="tl-scroll tl-ambient-glow" style={{ flex: 1, overflowY: "auto", maxHeight: "calc(100vh - 58px)" }}>
+    <div className="tl-scroll" style={{ flex: 1, overflowY: "auto", maxHeight: "calc(100vh - 58px)", minHeight: 0, position: "relative" }}>
+      <div className="tl-ambient-glow" aria-hidden="true" />
       <div style={{ maxWidth: 640, margin: "0 auto", padding: "28px 24px 80px" }}>
         <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: 20 }}>
           <button 
