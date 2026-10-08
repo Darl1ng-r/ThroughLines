@@ -36,6 +36,8 @@ const mockEntries = [
   }
 ]
 
+let currentNudges = []
+
 vi.mock('../../services/supabaseClient', () => {
   const mockChannel = {
     on: vi.fn().mockReturnThis(),
@@ -47,7 +49,7 @@ vi.mock('../../services/supabaseClient', () => {
       removeChannel: vi.fn(),
       from: vi.fn((table) => {
         if (table === 'topics') return createQueryBuilder(mockTopics)
-        if (table === 'nudges') return createQueryBuilder([])
+        if (table === 'nudges') return createQueryBuilder(currentNudges)
         if (table === 'private_entries') return createQueryBuilder(mockEntries)
         return createQueryBuilder([])
       })
@@ -68,6 +70,7 @@ vi.mock('../../services/draftStorage', () => ({
 describe('Dashboard Component', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    currentNudges = []
     AuthContext.useAuth.mockReturnValue({
       user: { id: 'user-1', email: 'tester@example.com' }
     })
@@ -102,5 +105,45 @@ describe('Dashboard Component', () => {
     const topicInput = screen.getByPlaceholderText(/e.g. AGI Alignment/i)
     expect(topicInput).toBeDefined()
     expect(topicInput.style.color).toBe('var(--color-ink)')
+  })
+
+  it('renders nudge indicators on sidebar, banner, latest timeline entry, and entry composer', async () => {
+    currentNudges = [
+      {
+        id: 'nudge-1',
+        topic_id: 'topic-1',
+        created_at: '2026-10-06T14:00:00Z',
+        nudger: {
+          id: 'user-2',
+          username: 'elena_vance',
+          display_name: 'Elena Vance'
+        }
+      }
+    ]
+
+    render(<Dashboard />)
+
+    // Verify TopicSidebar renders the nudge count badge
+    await waitFor(() => {
+      const badge = screen.getByTitle(/1 nudge received/i)
+      expect(badge).toBeDefined()
+      expect(badge.textContent).toBe('1')
+    })
+
+    // Verify Nudge Banner renders with reader username
+    await waitFor(() => {
+      expect(screen.getByText(/1 reader wants/i)).toBeDefined()
+      expect(screen.getByText(/@elena_vance/i)).toBeDefined()
+    })
+
+    // Verify TimelineItem on the latest entry renders the nudge indicator
+    await waitFor(() => {
+      expect(screen.getByText(/an update after this log:/i)).toBeDefined()
+    })
+
+    // Verify EntryComposer header displays the waiting badge
+    await waitFor(() => {
+      expect(screen.getByText(/🔔 1 waiting for update/i)).toBeDefined()
+    })
   })
 })

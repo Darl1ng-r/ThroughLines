@@ -212,7 +212,19 @@ export default function Dashboard() {
             setTopics(currentTopics => {
               const ownsTopic = currentTopics.some(t => t.id === newNudge.topic_id)
               if (ownsTopic) {
-                setNudges(prev => [...prev.filter(n => n.id !== newNudge.id), newNudge])
+                if (newNudge.nudger_id) {
+                  supabase
+                    .from('profiles')
+                    .select('id, username, display_name, avatar_url')
+                    .eq('id', newNudge.nudger_id)
+                    .maybeSingle()
+                    .then(({ data: profileData }) => {
+                      const enriched = { ...newNudge, nudger: profileData }
+                      setNudges(prev => [...prev.filter(n => n.id !== newNudge.id), enriched])
+                    })
+                } else {
+                  setNudges(prev => [...prev.filter(n => n.id !== newNudge.id), newNudge])
+                }
                 triggerToast("🔔 Someone just nudged you for an update!")
                 sendNativeNotification("🌿 New Throughline Nudge!", {
                   body: "Someone requested an update on your throughline!",
@@ -261,7 +273,17 @@ export default function Dashboard() {
 
       const { data: nudgesData, error: nudgesErr } = await supabase
         .from('nudges')
-        .select('id, topic_id')
+        .select(`
+          id,
+          topic_id,
+          created_at,
+          nudger:profiles!nudger_id (
+            id,
+            username,
+            display_name,
+            avatar_url
+          )
+        `)
 
       if (!nudgesErr) {
         setNudges(nudgesData || [])
@@ -769,7 +791,13 @@ export default function Dashboard() {
                 <div className="flex items-center gap-2">
                   <span style={{ fontSize: 16 }}>🔔</span>
                   <span>
-                    <strong>{selectedTopicNudges.length} {selectedTopicNudges.length === 1 ? 'person wants' : 'people want'}</strong> an update on this topic!
+                    <strong>{selectedTopicNudges.length} {selectedTopicNudges.length === 1 ? 'reader wants' : 'readers want'}</strong> an update on this throughline
+                    {selectedTopicNudges.some(n => n.nudger?.username) && (
+                      <span style={{ opacity: 0.9 }}>
+                        {" "}({selectedTopicNudges.slice(0, 3).map(n => `@${n.nudger?.username || 'reader'}`).join(', ')}
+                        {selectedTopicNudges.length > 3 ? ` +${selectedTopicNudges.length - 3} more` : ''})
+                      </span>
+                    )}!
                   </span>
                 </div>
                 <button 
@@ -831,10 +859,12 @@ export default function Dashboard() {
                     {entries.length === 0 ? "No entries logged yet." : "No entries match your search/filter."}
                   </div>
                 ) : (
-                  filteredEntries.map((entry) => (
+                  filteredEntries.map((entry, index) => (
                     <TimelineItem 
                       key={entry.id}
                       entry={entry}
+                      isLatest={index === filteredEntries.length - 1}
+                      nudges={selectedTopicNudges}
                       isSelected={selectedEntryId === entry.id}
                       onPublish={publishEntry}
                       onUnpublish={unpublishEntry}
@@ -879,6 +909,7 @@ export default function Dashboard() {
                   onAddEntry={addEntry}
                   submitting={submitting}
                   topicTitle={selectedTopic?.title}
+                  nudgeCount={selectedTopicNudges.length}
                 />
               </div>
             </div>

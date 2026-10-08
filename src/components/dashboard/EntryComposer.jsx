@@ -24,14 +24,15 @@ const EntryComposer = memo(function EntryComposer({
   setComposeVisibility,
   onAddEntry,
   submitting = false,
-  topicTitle = ""
+  topicTitle = "",
+  nudgeCount = 0
 }) {
   return (
     <div className="flex gap-4" style={{ position: "relative" }}>
       <div style={{ width: 12, height: 12, borderRadius: "50%", border: `2px dashed ${tokens.ember}`, marginTop: 6, flexShrink: 0 }} />
       <div style={{ flex: 1, background: tokens.card, border: `1px solid ${tokens.line}`, borderRadius: 10, padding: "16px 18px" }}>
         <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: 8 }}>
-          <div className="flex items-center gap-1.5" style={{ color: tokens.inkSoft }}>
+          <div className="flex items-center gap-1.5 flex-wrap" style={{ color: tokens.inkSoft }}>
             <PenLine size={13} />
             <span className="tl-mono" style={{ fontSize: 12 }}>
               {entriesCount === 0 ? "First entry" : "Add another log"}
@@ -39,6 +40,22 @@ const EntryComposer = memo(function EntryComposer({
             {topicTitle && (
               <span className="tl-display" style={{ fontSize: 13, fontWeight: 600, color: tokens.ink, marginLeft: 4 }}>
                 • {topicTitle}
+              </span>
+            )}
+            {nudgeCount > 0 && (
+              <span 
+                className="tl-mono animate-fade-in" 
+                style={{ 
+                  fontSize: 11, 
+                  background: tokens.ember, 
+                  color: tokens.paper, 
+                  padding: "1px 7px", 
+                  borderRadius: 999, 
+                  fontWeight: 600,
+                  marginLeft: 6
+                }}
+              >
+                🔔 {nudgeCount} waiting for update
               </span>
             )}
           </div>

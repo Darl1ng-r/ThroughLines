@@ -29,7 +29,7 @@ class SupabaseAdapter:
         """Syncs all simulated profiles, topics, entries and posts to Supabase and exports SQL/JSON."""
         # 1. Export SQL Seed Script
         sql_file = DEFAULT_OUTPUT_DIR / "throughlines_simulation_seed.sql"
-        self._export_sql(agents, sql_file)
+        self._export_sql(agents, simulation_log, sql_file)
         
         # 2. Export JSON snapshot
         json_file = DEFAULT_OUTPUT_DIR / "throughlines_simulation.json"
@@ -44,7 +44,7 @@ class SupabaseAdapter:
             print("🚀 Pushing simulation data to live Supabase instance...")
             self._live_push(agents)
 
-    def _export_sql(self, agents: List[Any], target_path: Path):
+    def _export_sql(self, agents: List[Any], simulation_log: List[Dict[str, Any]], target_path: Path):
         """Generates idempotent PostgreSQL insert statements compatible with Supabase auth.users & RLS."""
         lines = [
             "-- Throughlines Synthetic Community Seed Script",
@@ -114,6 +114,26 @@ class SupabaseAdapter:
                             f"VALUES ('{entry_id}', '{topic['id']}', '{a.id}', '{clean_content}', {conf}, 'approved', '{ts}') "
                             f"ON CONFLICT (id) DO NOTHING;"
                         )
+
+        # 4. Insert Nudges
+        agent_id_by_username = {a.username: a.id for a in agents}
+        nudge_events = [
+            e for e in simulation_log 
+            if (e.get("action_data", {}).get("action") == "NUDGE") or (e.get("action") == "NUDGE")
+        ]
+        if nudge_events:
+            lines.append("\n-- 4. Insert Nudges")
+            for event in nudge_events:
+                action_data = event.get("action_data") if event.get("action_data") else event
+                t_id = action_data.get("topic_id")
+                nudger_username = event.get("agent")
+                nudger_id = agent_id_by_username.get(nudger_username) or event.get("agent_id")
+                if t_id and nudger_id:
+                    lines.append(
+                        f"INSERT INTO public.nudges (topic_id, nudger_id) "
+                        f"VALUES ('{t_id}', '{nudger_id}') "
+                        f"ON CONFLICT (topic_id, nudger_id) DO NOTHING;"
+                    )
 
         lines.append("\nCOMMIT;\n")
         with open(target_path, "w", encoding="utf-8") as f:

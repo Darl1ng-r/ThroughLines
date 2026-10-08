@@ -85,4 +85,26 @@ describe('TimelineItem', () => {
 
     expect(onUpdate).toHaveBeenCalledWith('entry_101', 'Updated vector search reflections', 80)
   })
+
+  it('renders nudge indicator banner when isLatest is true and nudges exist', () => {
+    const mockNudges = [
+      { id: 'n1', topic_id: 't1', nudger: { username: 'elena_v', display_name: 'Elena V' } },
+      { id: 'n2', topic_id: 't1', nudger: { username: 'marcus_k', display_name: 'Marcus K' } }
+    ]
+
+    render(
+      <TimelineItem 
+        entry={mockEntryPublic}
+        isSelected={false}
+        onPublish={vi.fn()}
+        onUnpublish={vi.fn()}
+        isLatest={true}
+        nudges={mockNudges}
+      />
+    )
+
+    expect(screen.getByText(/2 readers want/i)).toBeDefined()
+    expect(screen.getByText(/@elena_v/i)).toBeDefined()
+    expect(screen.getByText(/@marcus_k/i)).toBeDefined()
+  })
 })

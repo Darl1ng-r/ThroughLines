@@ -11,6 +11,7 @@ const tokens = {
   pine: "var(--color-pine)",
   plum: "var(--color-plum)",
   ember: "var(--color-ember)",
+  emberSoft: "var(--color-ember-soft)",
   danger: "var(--color-danger)",
   line: "var(--color-line)",
 }
@@ -56,7 +57,15 @@ function VisibilityStatus({ visibility, status }) {
   )
 }
 
-const TimelineItem = memo(function TimelineItem({ entry, isSelected, onPublish, onUnpublish, onUpdate }) {
+const TimelineItem = memo(function TimelineItem({ 
+  entry, 
+  isSelected, 
+  onPublish, 
+  onUnpublish, 
+  onUpdate,
+  isLatest = false,
+  nudges = []
+}) {
   const isPublic = entry.public_posts && entry.public_posts.length > 0
   const status = isPublic ? entry.public_posts[0].moderation_status : null
 
@@ -212,6 +221,28 @@ const TimelineItem = memo(function TimelineItem({ entry, isSelected, onPublish, 
               <Lock size={12} /> Make private
             </button>
           )
+        )}
+
+        {/* Nudge Indicator on Latest Entry */}
+        {isLatest && nudges && nudges.length > 0 && (
+          <div 
+            className="flex items-center gap-2 animate-fade-in"
+            style={{
+              background: tokens.emberSoft,
+              border: `1px solid ${tokens.ember}33`,
+              borderRadius: 8,
+              padding: "8px 12px",
+              marginTop: 12
+            }}
+          >
+            <span style={{ fontSize: 13 }}>🔔</span>
+            <span className="tl-mono" style={{ fontSize: 12, color: tokens.ember, fontWeight: 500 }}>
+              <strong>{nudges.length} {nudges.length === 1 ? 'reader wants' : 'readers want'}</strong> an update after this log:
+              {" "}
+              {nudges.slice(0, 3).map(n => `@${n.nudger?.username || 'reader'}`).join(', ')}
+              {nudges.length > 3 ? ` +${nudges.length - 3} more` : ''}
+            </span>
+          </div>
         )}
       </div>
     </div>

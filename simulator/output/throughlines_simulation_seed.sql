@@ -1,5 +1,5 @@
 -- Throughlines Synthetic Community Seed Script
--- Generated on: 2026-10-06T17:17:44.481532+00:00
+-- Generated on: 2026-10-08T01:44:17.308510+00:00
 -- Compatible with Throughlines Supabase Auth & Public Schema
 
 BEGIN;
@@ -71,5 +71,10 @@ INSERT INTO public.private_entries (id, topic_id, user_id, content, confidence_r
 INSERT INTO public.public_posts (private_entry_id, topic_id, user_id, content, confidence_rating, moderation_status, entry_date) VALUES ('a2f8defd-ce0f-41f1-857f-2bf5f4a391b5', '4484b65e-9599-4308-99fd-78a4d164ff5b', '83753afd-e3d4-5e86-8637-dc7b1fd2333a', 'Re-evaluating prior conviction (91% to 90%). Found substantive friction points in the implementation feasibility.', 90, 'approved', '2026-10-06T17:17:44.481132+00:00') ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.private_entries (id, topic_id, user_id, content, confidence_rating, entry_date) VALUES ('955852c4-f0ed-4bd9-a18d-de22edbe1f46', '4484b65e-9599-4308-99fd-78a4d164ff5b', '83753afd-e3d4-5e86-8637-dc7b1fd2333a', 'Re-evaluating prior conviction (90% to 85%). Found substantive friction points in the implementation feasibility.', 85, '2026-10-06T17:17:44.481395+00:00') ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.public_posts (private_entry_id, topic_id, user_id, content, confidence_rating, moderation_status, entry_date) VALUES ('955852c4-f0ed-4bd9-a18d-de22edbe1f46', '4484b65e-9599-4308-99fd-78a4d164ff5b', '83753afd-e3d4-5e86-8637-dc7b1fd2333a', 'Re-evaluating prior conviction (90% to 85%). Found substantive friction points in the implementation feasibility.', 85, 'approved', '2026-10-06T17:17:44.481395+00:00') ON CONFLICT (id) DO NOTHING;
+
+-- 4. Insert Nudges
+INSERT INTO public.nudges (topic_id, nudger_id) VALUES ('af320f50-3f39-4a61-8e90-556e62f59698', '83753afd-e3d4-5e86-8637-dc7b1fd2333a') ON CONFLICT (topic_id, nudger_id) DO NOTHING;
+INSERT INTO public.nudges (topic_id, nudger_id) VALUES ('c5bf14ce-f293-4ec3-a29d-fd69664b35ee', 'fffdd8af-3347-58cd-9fa2-3197e2bbda5b') ON CONFLICT (topic_id, nudger_id) DO NOTHING;
+INSERT INTO public.nudges (topic_id, nudger_id) VALUES ('e18df796-d52b-47b0-9822-b7e473164f35', '83753afd-e3d4-5e86-8637-dc7b1fd2333a') ON CONFLICT (topic_id, nudger_id) DO NOTHING;
 
 COMMIT;

@@ -42,4 +42,10 @@ describe('EntryComposer', () => {
     expect(textarea.disabled).toBe(true)
     expect(btn.disabled).toBe(true)
   })
+
+  it('renders nudge badge when nudgeCount is greater than 0', () => {
+    render(<EntryComposer {...defaultProps} nudgeCount={3} topicTitle="AI Safety" />)
+    expect(screen.getByText(/3 waiting for update/i)).toBeDefined()
+    expect(screen.getByText(/• AI Safety/i)).toBeDefined()
+  })
 })
