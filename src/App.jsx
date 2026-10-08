@@ -5,6 +5,7 @@ import { Compass, LogOut, Settings as SettingsIcon, ChevronDown, User as UserIco
 
 import ProtectedRoute from './components/ProtectedRoute'
 import ErrorBoundary from './components/ErrorBoundary'
+import TopbarWaves from './components/TopbarWaves'
 
 // Route-level Code Splitting for performance and small initial bundle size
 const Landing = lazy(() => import('./pages/Landing'))
@@ -99,18 +100,10 @@ function NavBar() {
     : user?.email ? user.email.slice(0, 2).toUpperCase() : "?"
 
   return (
-    <header
-      className="flex items-center justify-between"
-      role="banner"
-      style={{
-        padding: "14px 24px",
-        borderBottom: `1px solid ${tokens.line}`,
-        background: tokens.paper,
-        position: "relative",
-        zIndex: 20
-      }}
-    >
-      <div className="flex items-center gap-6">
+    <header className="tl-topbar" role="banner">
+      <TopbarWaves />
+      <div className="tl-topbar-content flex items-center justify-between">
+        <div className="flex items-center gap-6">
         <Link
           to={user ? "/dashboard" : "/"}
           style={{ textDecoration: 'none', color: 'inherit' }}
@@ -299,7 +292,8 @@ function NavBar() {
           </div>
         )}
       </div>
-    </header>
+    </div>
+  </header>
   )
 }
 
