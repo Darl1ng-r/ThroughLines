@@ -1,219 +1,222 @@
 # 🌿 Throughline
 
-**Track how your beliefs evolve over time.**
+**Track how your beliefs, convictions, and perspectives evolve over time.**
 
 Write about the same topic as many times as you need to. Plot your certainty. Keep it private, or put it out into the open — one entry at a time.
 
 > *"Say what you think. Say it again when you don't anymore."*
 
----
-
-## What Is This?
-
-Throughline is a personal thought journal that tracks **belief evolution**. Unlike a regular diary that captures moments, Throughline lets you write about the *same topic repeatedly* — and shows you how your conviction has changed over time through a confidence graph.
-
-**Core loop:**
-1. Create a **Topic** (e.g., "Is remote work better?", "My view on AI")
-2. Add **Entries** over days, weeks, or years — each with a confidence rating (0–100%)
-3. Watch your **Throughline** — the trajectory of your certainty — plotted over time
-4. Optionally **publish** individual entries to the public Discover feed
-5. Let other users **nudge** you when they want a new entry on a topic you've been quiet on
+[![Vitest Tests](https://img.shields.io/badge/tests-95%20passed%20(22%20suites)-2F4A3D?style=flat-square)](file:///home/darling/Downloads/Project-Related/Thoughlines/ThroughLines/src/components/__tests__)
+[![React 18](https://img.shields.io/badge/frontend-React%2018%20%7C%20Vite%206-2F4A3D?style=flat-square)](https://vitejs.dev/)
+[![Supabase](https://img.shields.io/badge/backend-Supabase%20%7C%20PostgreSQL-3ECF8E?style=flat-square)](https://supabase.com/)
+[![License](https://img.shields.io/badge/license-MIT-AD6330?style=flat-square)](LICENSE)
 
 ---
 
-## Tech Stack
+## What Is Throughline?
 
-| Layer | Technology |
+Traditional microblogging platforms reward reactionary hot-takes and lock users into performative consistency. **Throughline** functions as an **epistemic reasoning laboratory** designed to capture cognitive trajectories.
+
+Instead of isolated daily posts, Throughline organizes thoughts into continuous **throughlines**:
+1. **Create an Intellectual Track:** Define a topic (e.g., *"Is Artificial General Intelligence near?"*, *"Universal Basic Income feasibility"*).
+2. **Log Subjective Conviction:** Record journal entries with a quantitative certainty slider (0–100%) and structured epistemic shift attribution (counter-arguments, empirical data, value shifts).
+3. **Inspect Belief Evolution:** Visualize your certainty curve over weeks, months, or years with interactive curvature graphs and inflection pivots.
+4. **Curated Public Sharing:** Keep entries private by default, or publish individual milestones to the community **Discover** feed.
+5. **Realtime Epistemic Nudges:** Allow readers to nudge you for an update when your position on a topic has been dormant.
+
+---
+
+## 🏗️ Architecture & Technology Stack
+
+```
+                          ┌───────────────────────────────┐
+                          │   Client Browser (SPA)        │
+                          │   React 18 + Vite 6           │
+                          │   Tactile Custom Design System│
+                          └──────┬──────────────┬─────────┘
+                                 │              │
+                   HTTPS / WSS   │              │ Edge Proxy
+                                 ▼              ▼
+           ┌────────────────────────┐    ┌────────────────────────┐
+           │   Supabase Cloud       │    │  Supabase Edge Workers │
+           │  • PostgreSQL + RLS    │    │  • Redis Cache Proxy   │
+           │  • Supabase Auth (JWT) │    │  • AI Content Moderator│
+           │  • Realtime WebSockets │    └──────────┬─────────────┘
+           │  • Outbox Event Queue  │               │
+           └────────────────────────┘               ▼
+                                         ┌────────────────────────┐
+                                         │  Upstash Redis Cache   │
+                                         └────────────────────────┘
+```
+
+| Layer | Technologies & Implementations |
 |:---|:---|
-| **Frontend** | React 18, Vite 5, React Router 6 |
-| **Styling** | Vanilla CSS with CSS Variables (light + dark mode) |
-| **Backend** | Supabase (PostgreSQL + Auth + Realtime + Edge Functions) |
-| **Caching** | Upstash Redis (via authenticated Edge Function proxy) |
-| **Container** | Docker + Nginx (non-root, port 8080) |
-| **CI/CD** | GitHub Actions (secret scanning + test + build) |
-| **PWA** | Service Worker, Web Push, installable |
+| **Frontend Core** | React 18, React Router v6, Recharts (spline conviction graphs), Lucide Icons |
+| **Styling & Design System** | Vanilla CSS custom properties with tactile paper textures, fluid typography, Archival Paper (Light) and Archival Noir (Dark) modes |
+| **Local-First State** | IndexedDB offline draft caching (`draftStorage.js`), local state recovery |
+| **Command Hub** | Keyboard-first palette (`⌘K` / `Ctrl+K`) with zero-shift fixed overlay |
+| **Backend & DB** | Supabase (PostgreSQL 15), Row Level Security (RLS), atomic RPC stored procedures |
+| **Event Architecture** | Transactional Outbox Pattern (`outbox_events`), decoupled in-browser Event Bus |
+| **Content Moderation** | Two-tier defense: in-engine Unicode/homoglyph normalizer trigger + OpenAI Moderation Edge Function |
+| **Caching & Proxy** | Multi-tier L1 in-memory LRU + L2 Upstash Redis via authenticated Edge Function |
+| **Security & Privacy** | NIST SP 800-63B password breach checks (HIBP k-anonymity), strict CSP, PII scrubbing |
+| **Hosting & Deploy** | Netlify CDN (`netlify.toml`), Vercel (`vercel.json`), or non-root Docker (`nginx.conf`) |
+| **CI/CD & Testing** | GitHub Actions (`ci.yml`), Gitleaks secret detection, Vitest (95 tests across 22 suites) |
 
 ---
 
-## Local Development
+## 🚀 Key Features
+
+* **Belief Evolution Timeline:** Visual spline graph plotting conviction shifts over time with automatic pivot detection (inflections $\ge 15\%$).
+* **Epistemic Shift Attribution:** Explicitly log why your conviction moved: *Counter-argument*, *Empirical data*, *Real-world event*, *Value shift*, or *Introspective review*.
+* **Immutable Revision History:** Audit trail tracking prior content, previous conviction, and timestamps upon entry edits.
+* **Command Hub (`⌘K` / `Ctrl+K`):** Fast keyboard modal for topic jumping, theme switching, data exports, and shortcuts.
+* **Dual Privacy Model:** Private journal entries are strictly separated from public post snapshots. Private entries are guarded by PostgreSQL RLS kernel policies and never queryable by third parties.
+* **Realtime Discourse Nudges:** WebSocket subscription alert when readers request an update on dormant throughlines, with built-in cooldowns and rate limits.
+* **Zero-Loss Drafts:** Background auto-saving to IndexedDB ensures draft entries survive network interruptions, tab crashes, or accidental reloads.
+* **Data Portability & GDPR Export:** One-click instant export of your entire intellectual history as structured Obsidian Markdown files and JSON digests.
+
+---
+
+## 💻 Local Development
 
 ### Prerequisites
-- Node.js 20+
+- Node.js 20+ (LTS recommended)
 - A [Supabase](https://supabase.com) project (free tier works)
 
-### 1. Clone & install
-
+### 1. Clone & Install Dependencies
 ```bash
 git clone https://github.com/yourusername/throughlines.git
 cd throughlines
 npm ci
 ```
 
-### 2. Configure environment
-
-Copy the example and fill in your values:
-
+### 2. Configure Environment Variables
+Copy `.env.example` to `.env`:
 ```bash
-cp .env .env.local
+cp .env.example .env
 ```
 
-| Variable | Where to find it |
-|:---|:---|
-| `VITE_SUPABASE_URL` | Supabase Dashboard → Project Settings → API |
-| `VITE_SUPABASE_ANON_KEY` | Supabase Dashboard → Project Settings → API |
-| `VITE_APP_URL` | `http://localhost:3000` for local dev |
-| `VITE_GOOGLE_CLIENT_ID` | [Google Cloud Console](https://console.cloud.google.com) → Credentials |
-| `VITE_SENTRY_DSN` | [Sentry.io](https://sentry.io) → Project Settings → SDK Setup (free tier) |
+Populate the required keys in `.env`:
+```ini
+# Supabase Configuration
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 
-### 3. Set up the database
+# App URL (http://localhost:3000 for local development)
+VITE_APP_URL=http://localhost:3000
 
-Run the migration in **Supabase Dashboard → SQL Editor**:
+# Google OAuth Client ID (optional for local email login)
+VITE_GOOGLE_CLIENT_ID=your_client_id.apps.googleusercontent.com
 
+# Sentry DSN (leave empty to disable during local dev)
+VITE_SENTRY_DSN=
 ```
-supabase/migrations/production_schema_and_indexes.sql
-```
 
-This script is fully idempotent — safe to run multiple times.
+### 3. Database Setup (Migrations)
+Execute the migrations in sequence in your **Supabase Dashboard → SQL Editor**:
 
-### 4. Start the dev server
+1. [`production_schema_and_indexes.sql`](file:///home/darling/Downloads/Project-Related/Thoughlines/ThroughLines/supabase/migrations/production_schema_and_indexes.sql) — Core tables, constraints, triggers, and baseline indexes.
+2. [`20261008_content_moderation_hardening.sql`](file:///home/darling/Downloads/Project-Related/Thoughlines/ThroughLines/supabase/migrations/20261008_content_moderation_hardening.sql) — Text normalization triggers and moderation state machine.
+3. [`20261008_epistemic_system_enhancements.sql`](file:///home/darling/Downloads/Project-Related/Thoughlines/ThroughLines/supabase/migrations/20261008_epistemic_system_enhancements.sql) — Revision history table, shift attribution, and transactional outbox.
+4. [`20261008_production_foreign_key_indexes.sql`](file:///home/darling/Downloads/Project-Related/Thoughlines/ThroughLines/supabase/migrations/20261008_production_foreign_key_indexes.sql) — Foreign key cascade delete indexes and performance optimization.
 
+*Note: All migrations are fully idempotent (`IF NOT EXISTS`, guarded DO blocks) and safe to run multiple times.*
+
+### 4. Run Development Server
 ```bash
 npm run dev
-# Opens at http://localhost:3000
 ```
+The application will be accessible at **http://localhost:3000**.
 
-### 5. Run tests
-
+### 5. Run Test Suite
 ```bash
 npm test
-# 15 test suites, 42 tests
 ```
+Executes all 22 Vitest test suites (95 tests) verifying components, services, and security boundaries.
 
 ---
 
-## Deployment
+## 🚢 Production Deployment
 
-### Option A: Docker (Recommended for VPS)
+### Option A: Netlify (Recommended)
+This repository includes a pre-configured [netlify.toml](file:///home/darling/Downloads/Project-Related/Thoughlines/ThroughLines/netlify.toml), [public/_headers](file:///home/darling/Downloads/Project-Related/Thoughlines/ThroughLines/public/_headers), and [public/_redirects](file:///home/darling/Downloads/Project-Related/Thoughlines/ThroughLines/public/_redirects).
+
+1. Push your code to GitHub / GitLab.
+2. Connect your repository in Netlify Dashboard.
+3. Set build settings:
+   - **Build command:** `npm run build`
+   - **Publish directory:** `dist`
+4. Set environment variables in Netlify Dashboard:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+   - `VITE_APP_URL` (e.g. `https://throughline.app`)
+   - `VITE_GOOGLE_CLIENT_ID`
+   - `VITE_SENTRY_DSN`
+5. Deploy site.
+
+### Option B: Docker / VPS Self-Hosted
+A multi-stage production [Dockerfile](file:///home/darling/Downloads/Project-Related/Thoughlines/ThroughLines/Dockerfile) and [docker-compose.yml](file:///home/darling/Downloads/Project-Related/Thoughlines/ThroughLines/docker-compose.yml) are provided:
 
 ```bash
 docker compose up -d --build
 ```
+- Multi-stage build compiles the static bundle and serves it via an unprivileged non-root Nginx container (`USER nginx`) on port 8080.
+- Automatic container healthchecks running at `/healthz`.
 
-Required build args:
-
-```bash
-VITE_SUPABASE_URL=...
-VITE_SUPABASE_ANON_KEY=...
-VITE_APP_URL=https://yourdomain.com
-VITE_GOOGLE_CLIENT_ID=...
-```
-
-The container runs as a **non-root user** on port 8080, mapped to 80 via docker-compose.
-
-### Option B: Netlify / Vercel (Static)
-
-```bash
-npm run build
-# Deploy the /dist directory
-```
-
-Set all `VITE_*` env vars in the platform dashboard.
+### Option C: Vercel
+Configuration is pre-set in [vercel.json](file:///home/darling/Downloads/Project-Related/Thoughlines/ThroughLines/vercel.json) with strict CSP, HSTS, and SPA routing rewrites.
 
 ---
 
-## 🚀 Cloudflare CDN Setup (Free — Do This Before Launch)
+## ⚡ Supabase Edge Functions Deployment
 
-This is the single highest-leverage free upgrade. Takes 10 minutes and cuts server load by ~70%.
+ThroughLines uses two serverless Edge Functions located in `supabase/functions/`:
 
-1. Create a free account at [cloudflare.com](https://cloudflare.com)
-2. **Add a site** → enter your domain → **Free plan**
-3. Cloudflare scans your DNS — verify records are correct
-4. Update your registrar's nameservers to Cloudflare's values
-5. Once active → **Speed → Optimization**:
-   - ✅ Auto Minify (JS, CSS, HTML)
-   - ✅ Brotli compression
-6. **Caching → Configuration**:
-   - Browser Cache TTL: **1 year**
-   - Page Rule: `yourdomain.com/assets/*` → Cache Level: **Cache Everything**
-7. **SSL/TLS** → **Full (strict)** mode
-8. **Speed → Network** → Enable **HTTP/3 (QUIC)**
-9. **Analytics** tab → Enable **Web Analytics** (free, no cookie banner needed)
-
----
-
-## 🔭 Sentry Error Tracking (Free — 5,000 errors/month)
-
-1. Create a free account at [sentry.io](https://sentry.io)
-2. New project → Platform: **React**
-3. Copy your **DSN** from Project Settings → SDK Setup
-4. Add to `.env`: `VITE_SENTRY_DSN=https://xxxx@oXXX.ingest.sentry.io/XXXX`
-5. Add to GitHub Secrets for CI builds
-
-Sentry activates automatically when DSN is present. Session replays only fire on errors (privacy-preserving).
-
----
-
-## Supabase Edge Function: Redis Proxy
-
-Set these in **Supabase Dashboard → Edge Functions → Secrets**:
-
-| Secret | Value |
-|:---|:---|
-| `UPSTASH_REDIS_REST_URL` | From Upstash console |
-| `UPSTASH_REDIS_REST_TOKEN` | From Upstash console |
-| `APP_ORIGIN` | `https://yourdomain.com` |
-
+### 1. Redis Cache Proxy (`redis-proxy`)
+Provides an authenticated, rate-limited bridge to Upstash Redis without exposing tokens to the browser.
 ```bash
 supabase functions deploy redis-proxy
 ```
+Configure secrets in **Supabase Dashboard → Edge Functions → Secrets**:
+- `UPSTASH_REDIS_REST_URL`
+- `UPSTASH_REDIS_REST_TOKEN`
+- `APP_ORIGIN` (e.g. `https://throughline.app`)
 
----
-
-## Architecture
-
+### 2. Automated Content Moderation (`moderate-post`)
+Evaluates public submissions against Unicode obfuscation and the OpenAI Moderation API.
+```bash
+supabase functions deploy moderate-post
 ```
-Browser
-  ├── Static Assets → Cloudflare CDN → Nginx → /dist
-  ├── Auth & Database → Supabase (PostgreSQL + RLS)
-  ├── Realtime (nudges) → Supabase Realtime WebSockets
-  └── Redis Cache → Edge Function (JWT-gated) → Upstash
-```
-
-**Security highlights:**
-- Row Level Security on all tables
-- SECURITY DEFINER functions hardened with `SET search_path`
-- Server-side content moderation trigger (bypass-proof)
-- Non-root Docker container
-- Client-side HIBP breach detection (NIST SP 800-63B)
-- Auth lockout after 5 failures (30s cooldown)
-- Gitleaks secret scanning in CI
+Configure secrets:
+- `OPENAI_API_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
 ---
 
-## Environment Variables
+## 🛡️ Security & Privacy Engineering
 
-| Variable | Required | Description |
-|:---|:---:|:---|
-| `VITE_SUPABASE_URL` | ✅ | Supabase project URL |
-| `VITE_SUPABASE_ANON_KEY` | ✅ | Supabase anonymous key |
-| `VITE_APP_URL` | ✅ | Production URL (used in OG meta tags) |
-| `VITE_GOOGLE_CLIENT_ID` | ✅ | Google OAuth Client ID |
-| `VITE_REDIS_PROXY_URL` | ⚠️ | Supabase Edge Function URL for Redis |
-| `VITE_SENTRY_DSN` | ⚠️ | Sentry DSN (leave blank to disable) |
+- **Zero-Trust Row Level Security:** Every table enforces strict RLS policies utilizing `(select auth.uid())` to prevent session initialization bypasses.
+- **Anti-Tampering Database Triggers:** Triggers run `SECURITY DEFINER` with fixed `search_path = public, pg_temp` to prevent SQL injection and schema hijacking. Users cannot directly manipulate `moderation_status`.
+- **NIST SP 800-63B Password Validation:** Client password validation queries HaveIBeenPwned via k-anonymity (SHA-1 prefixing), blocking compromised passwords without sending the plaintext password over the network.
+- **Resilient Cold-Start Handling:** Auth session checks feature an active 3.5s timeout race condition to prevent permanent loading screens if external networks experience latency.
+- **Strict Content Security Policy (CSP):** Allowlist-only script and connect sources, disabling `unsafe-eval` and clickjacking via `frame-ancestors 'none'`.
+- **PII Scrubbing:** Sentry and local telemetry automatically strip authentication headers, cookies, passwords, and user emails before logging.
 
 ---
 
-## Scripts
+## 📜 Available NPM Scripts
 
-| Command | Description |
+| Command | Action |
 |:---|:---|
-| `npm run dev` | Dev server on port 3000 |
-| `npm run build` | Production bundle to `/dist` |
-| `npm test` | Vitest suite (42 tests) |
-| `npm run preview` | Preview production build |
+| `npm run dev` | Starts Vite development server at `http://localhost:3000` |
+| `npm run build` | Builds optimized production bundle to `/dist` with `esbuild` console stripping |
+| `npm run preview` | Runs local HTTP preview of the compiled `/dist` bundle on port 4173 |
+| `npm test` | Runs the full Vitest suite (95 tests) |
+| `npm run lint` | Runs code quality and linting checks |
 
 ---
 
-## License
+## 📄 License
 
-MIT
+Distributed under the **MIT License**. See `LICENSE` for more information.
