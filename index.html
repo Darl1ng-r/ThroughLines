@@ -47,6 +47,23 @@
   <!-- Google Identity Services — Client ID injected via build-time env var -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <meta name="google-signin-client_id" content="%VITE_GOOGLE_CLIENT_ID%" />
+
+  <!-- Structured Data (JSON-LD) for Search Engine Rich Snippets -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Throughline",
+    "url": "https://throughline.app",
+    "description": "Write about the same topic over time. Plot your certainty. Track how your opinions, beliefs, and convictions evolve — privately or publicly.",
+    "applicationCategory": "SocialNetworkingApplication",
+    "operatingSystem": "All",
+    "offers": {
+      "@type": "Offer",
+      "price": "0"
+    }
+  }
+  </script>
 </head>
 
 <body>

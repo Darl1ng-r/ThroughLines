@@ -110,6 +110,17 @@ CREATE INDEX IF NOT EXISTS idx_outbox_events_status ON public.outbox_events (sta
 
 ALTER TABLE public.outbox_events ENABLE ROW LEVEL SECURITY;
 
+REVOKE ALL ON TABLE public.outbox_events FROM PUBLIC, anon;
+GRANT ALL ON TABLE public.outbox_events TO service_role;
+GRANT SELECT ON TABLE public.outbox_events TO authenticated;
+
+DROP POLICY IF EXISTS "Users can only view own outbox events" ON public.outbox_events;
+CREATE POLICY "Users can only view own outbox events" ON public.outbox_events
+    FOR SELECT TO authenticated
+    USING (
+        (payload->>'userId')::UUID = (select auth.uid())
+    );
+
 -- 4. High-Performance Covering Index on Public Posts
 CREATE INDEX IF NOT EXISTS idx_public_posts_covering 
 ON public.public_posts (moderation_status, entry_date DESC) 

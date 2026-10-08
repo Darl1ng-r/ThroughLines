@@ -500,6 +500,34 @@ CREATE POLICY "Topic owners can delete nudges" ON public.nudges
         )
     );
 
+-- 6. Entry Revisions
+ALTER TABLE public.entry_revisions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view own entry revisions" ON public.entry_revisions;
+CREATE POLICY "Users can view own entry revisions" ON public.entry_revisions
+    FOR SELECT TO authenticated
+    USING (
+        revised_by = (select auth.uid())
+        OR EXISTS (
+            SELECT 1 FROM public.private_entries
+            WHERE private_entries.id = entry_revisions.entry_id AND private_entries.user_id = (select auth.uid())
+        )
+    );
+
+-- 7. Transactional Outbox Events
+ALTER TABLE public.outbox_events ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE public.outbox_events FROM PUBLIC, anon;
+GRANT ALL ON TABLE public.outbox_events TO service_role;
+GRANT SELECT ON TABLE public.outbox_events TO authenticated;
+
+DROP POLICY IF EXISTS "Users can only view own outbox events" ON public.outbox_events;
+CREATE POLICY "Users can only view own outbox events" ON public.outbox_events
+    FOR SELECT TO authenticated
+    USING (
+        (payload->>'userId')::UUID = (select auth.uid())
+    );
+
 -- ---------------------------------------------------------------------------
 -- 8. Atomic Multi-Operation Entry Transaction Function (PL/pgSQL RPC)
 -- Hardened with explicit search_path and restricted to authenticated role.

@@ -28,7 +28,7 @@ services:
     # Only uncomment the line below for local debugging.
     # ports:
     #   - "127.0.0.1:6379:6379"
-    command: redis-server --save 60 1 --loglevel warning
+    command: redis-server --maxmemory 200mb --maxmemory-policy allkeys-lru --save "" --loglevel warning
     volumes:
       - redis_data:/data
     restart: always
