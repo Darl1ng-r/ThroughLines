@@ -1,10 +1,11 @@
 import React, { useState, useEffect, lazy, Suspense, useRef } from 'react'
 import { BrowserRouter as Router, Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
-import { Compass, LogOut, Settings as SettingsIcon, ChevronDown, User as UserIcon, Moon, Sun } from 'lucide-react'
+import { Compass, LogOut, Settings as SettingsIcon, ChevronDown, User as UserIcon, Moon, Sun, Search } from 'lucide-react'
 
 import ProtectedRoute from './components/ProtectedRoute'
 import ErrorBoundary from './components/ErrorBoundary'
+import CommandPalette from './components/CommandPalette'
 
 // Route-level Code Splitting for performance and small initial bundle size
 const Landing = lazy(() => import('./pages/Landing'))
@@ -44,19 +45,13 @@ function getPageTitle(pathname) {
 }
 
 // Subcomponent: Navigation Bar
-function NavBar() {
+function NavBar({ onOpenCommandPalette, theme, toggleTheme }) {
   const { user, profile, signOut } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
-  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light')
   const menuRef = useRef(null)
   const menuButtonRef = useRef(null)
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('theme', theme)
-  }, [theme])
 
   // Close dropdown on Escape key or outside click
   useEffect(() => {
@@ -165,6 +160,26 @@ function NavBar() {
       </div>
 
       <div className="flex items-center gap-2">
+        <button
+          onClick={onOpenCommandPalette}
+          className="tl-focus btn-premium flex items-center gap-1.5"
+          aria-label="Open Command Hub"
+          title="Command Hub (⌘K / Ctrl+K)"
+          style={{
+            padding: "4px 10px",
+            borderRadius: 999,
+            border: "1px solid rgba(255, 255, 255, 0.18)",
+            background: "rgba(255, 255, 255, 0.10)",
+            color: "#F1EEE4",
+            fontSize: 12,
+            cursor: "pointer"
+          }}
+        >
+          <Search size={12} aria-hidden="true" />
+          <span className="hidden sm:inline" style={{ opacity: 0.9 }}>Search</span>
+          <kbd style={{ fontSize: 10, padding: "1px 5px", borderRadius: 4, background: "rgba(255, 255, 255, 0.18)", marginLeft: 2, fontFamily: "var(--font-mono)" }}>⌘K</kbd>
+        </button>
+
         <button
           onClick={toggleTheme}
           className="tl-focus btn-premium flex items-center justify-center"
@@ -327,6 +342,30 @@ function MainLayout() {
   const location = useLocation()
   const mainRef = useRef(null)
 
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light')
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('theme', theme)
+  }, [theme])
+
+  function toggleTheme() {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark')
+  }
+
+  // Global Cmd+K / Ctrl+K listener
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setCommandPaletteOpen(prev => !prev)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
   // Update document title and move focus to main content on route change
   useEffect(() => {
     document.title = getPageTitle(location.pathname)
@@ -361,7 +400,17 @@ function MainLayout() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: tokens.paper, color: tokens.ink }}>
       <SkipLink />
-      <NavBar />
+      <NavBar 
+        onOpenCommandPalette={() => setCommandPaletteOpen(true)} 
+        theme={theme}
+        toggleTheme={toggleTheme}
+      />
+      <CommandPalette 
+        isOpen={commandPaletteOpen} 
+        onClose={() => setCommandPaletteOpen(false)}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
       <main
         id="main-content"
         ref={mainRef}

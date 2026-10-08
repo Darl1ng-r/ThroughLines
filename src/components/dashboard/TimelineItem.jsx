@@ -1,7 +1,8 @@
 import React, { memo, useState } from 'react'
 import MarkdownText from '../MarkdownText'
-import { Lock, Globe, AlertCircle, Edit3, Check, X } from 'lucide-react'
+import { Lock, Globe, AlertCircle, Edit3, Check, X, History, ChevronDown, ChevronUp } from 'lucide-react'
 import { moderateContent } from '../../services/contentModerationService'
+import { supabase } from '../../services/supabaseClient'
 
 const tokens = {
   paper: "var(--color-paper)",
@@ -15,6 +16,14 @@ const tokens = {
   emberSoft: "var(--color-ember-soft)",
   danger: "var(--color-danger)",
   line: "var(--color-line)",
+}
+
+const SHIFT_REASONS = {
+  empirical_data: { label: 'Empirical Data', icon: '📊' },
+  counter_argument: { label: 'Counter-Argument', icon: '⚖️' },
+  real_world_event: { label: 'Real-World Event', icon: '🌍' },
+  value_shift: { label: 'Value Shift', icon: '💡' },
+  introspection: { label: 'Introspection', icon: '🔍' },
 }
 
 function Meter({ value }) {
@@ -83,6 +92,9 @@ const TimelineItem = memo(function TimelineItem({
   const [editConfidence, setEditConfidence] = useState(entry.confidence_rating)
   const [saving, setSaving] = useState(false)
   const [editError, setEditError] = useState(null)
+  const [showRevisions, setShowRevisions] = useState(false)
+  const [revisions, setRevisions] = useState(null)
+  const [loadingRevisions, setLoadingRevisions] = useState(false)
 
   const nodeColor = isSelected 
     ? tokens.ember 
@@ -95,6 +107,36 @@ const TimelineItem = memo(function TimelineItem({
       formattedDate = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
     }
   } catch (_) {}
+
+  async function handleToggleRevisions() {
+    if (showRevisions) {
+      setShowRevisions(false)
+      return
+    }
+
+    setShowRevisions(true)
+    if (revisions === null) {
+      setLoadingRevisions(true)
+      try {
+        const { data, error } = await supabase
+          .from('entry_revisions')
+          .select('*')
+          .eq('entry_id', entry.id)
+          .order('revised_at', { ascending: false })
+
+        if (!error && data) {
+          setRevisions(data)
+        } else {
+          setRevisions([])
+        }
+      } catch (e) {
+        console.warn('Could not load entry revisions:', e)
+        setRevisions([])
+      } finally {
+        setLoadingRevisions(false)
+      }
+    }
+  }
 
   async function handleSaveEdit() {
     const trimmed = editContent.trim()
@@ -115,6 +157,8 @@ const TimelineItem = memo(function TimelineItem({
         await onUpdate(entry.id, trimmed, Number(editConfidence))
       }
       setIsEditing(false)
+      // Invalidate cached revisions so next click reflects new revision log
+      setRevisions(null)
     } catch (err) {
       console.error('Save edit error:', err)
       setEditError('Failed to save edit.')
@@ -122,6 +166,8 @@ const TimelineItem = memo(function TimelineItem({
       setSaving(false)
     }
   }
+
+  const shiftInfo = entry.shift_reason ? SHIFT_REASONS[entry.shift_reason] : null
 
   return (
     <div id={`entry-${entry.id}`} className="tl-entry flex gap-4" style={{ position: "relative" }}>
@@ -157,22 +203,50 @@ const TimelineItem = memo(function TimelineItem({
         }}
       >
         <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: 8 }}>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="tl-mono" style={{ fontSize: 12, color: tokens.inkFaint }}>
               {formattedDate}
             </span>
             <Meter value={isEditing ? editConfidence : entry.confidence_rating} />
+            {shiftInfo && (
+              <span 
+                className="tl-mono flex items-center gap-1"
+                style={{
+                  fontSize: 11,
+                  padding: "1px 7px",
+                  borderRadius: 6,
+                  background: "rgba(74, 107, 90, 0.1)",
+                  color: tokens.pine,
+                  border: `1px solid rgba(74, 107, 90, 0.22)`,
+                  fontWeight: 500
+                }}
+                title={`Attributed shift reason: ${shiftInfo.label}`}
+              >
+                <span>{shiftInfo.icon}</span>
+                <span>{shiftInfo.label}</span>
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {!isEditing && (
-              <button
-                onClick={() => { setEditContent(entry.content); setEditConfidence(entry.confidence_rating); setIsEditing(true); }}
-                className="tl-focus flex items-center gap-1 btn-premium"
-                style={{ border: "none", background: "none", cursor: "pointer", color: tokens.inkSoft, fontSize: 11, fontWeight: 500, padding: 0 }}
-                title="Edit entry"
-              >
-                <Edit3 size={12} /> Edit
-              </button>
+              <>
+                <button
+                  onClick={handleToggleRevisions}
+                  className="tl-focus flex items-center gap-1 btn-premium"
+                  style={{ border: "none", background: "none", cursor: "pointer", color: tokens.inkSoft, fontSize: 11, fontWeight: 500, padding: 0 }}
+                  title="View revision audit trail"
+                >
+                  <History size={12} /> {showRevisions ? 'Hide Audit' : 'History'}
+                </button>
+                <button
+                  onClick={() => { setEditContent(entry.content); setEditConfidence(entry.confidence_rating); setIsEditing(true); }}
+                  className="tl-focus flex items-center gap-1 btn-premium"
+                  style={{ border: "none", background: "none", cursor: "pointer", color: tokens.inkSoft, fontSize: 11, fontWeight: 500, padding: 0 }}
+                  title="Edit entry"
+                >
+                  <Edit3 size={12} /> Edit
+                </button>
+              </>
             )}
             <VisibilityStatus visibility={isPublic ? 'public' : 'private'} status={status} />
           </div>
@@ -250,6 +324,76 @@ const TimelineItem = memo(function TimelineItem({
         ) : (
           <div style={{ fontSize: 14.5, color: tokens.ink, marginBottom: 10 }}>
             <MarkdownText content={entry.content} />
+          </div>
+        )}
+        
+        {/* Immutable Revision History Audit Trail */}
+        {showRevisions && (
+          <div
+            className="animate-fade-in"
+            style={{
+              marginTop: 12,
+              marginBottom: 12,
+              padding: "12px 14px",
+              borderRadius: 8,
+              background: "rgba(0, 0, 0, 0.03)",
+              border: `1px solid ${tokens.line}`,
+              borderLeft: `3px solid ${tokens.pine}`
+            }}
+          >
+            <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+              <span className="tl-mono" style={{ fontSize: 11, fontWeight: 600, color: tokens.inkSoft, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Immutable Audit Trail ({revisions ? revisions.length : '...'})
+              </span>
+              <button
+                onClick={() => setShowRevisions(false)}
+                className="tl-focus btn-premium"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: tokens.inkFaint, fontSize: 11, padding: 0 }}
+              >
+                Close
+              </button>
+            </div>
+
+            {loadingRevisions ? (
+              <div className="tl-mono" style={{ fontSize: 12, color: tokens.inkSoft }}>Loading immutable revision ledger...</div>
+            ) : !revisions || revisions.length === 0 ? (
+              <div className="tl-mono" style={{ fontSize: 12, color: tokens.inkFaint }}>
+                No prior revisions recorded. This entry stands at original creation state.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {revisions.map((rev) => {
+                  let revDate = rev.revised_at
+                  try {
+                    revDate = new Date(rev.revised_at).toLocaleString()
+                  } catch (_) {}
+                  return (
+                    <div
+                      key={rev.id}
+                      style={{
+                        padding: "8px 10px",
+                        borderRadius: 6,
+                        background: tokens.card,
+                        border: `1px solid ${tokens.line}`,
+                        fontSize: 12.5
+                      }}
+                    >
+                      <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+                        <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkSoft }}>
+                          Prior Conviction: <strong>{rev.prior_confidence}%</strong>
+                        </span>
+                        <span className="tl-mono" style={{ fontSize: 10, color: tokens.inkFaint }}>
+                          Revised {revDate}
+                        </span>
+                      </div>
+                      <div style={{ color: tokens.ink, fontSize: 13, fontStyle: "italic", whiteSpace: "pre-wrap" }}>
+                        &ldquo;{rev.prior_content}&rdquo;
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
         

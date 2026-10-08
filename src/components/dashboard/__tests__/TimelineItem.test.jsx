@@ -107,4 +107,40 @@ describe('TimelineItem', () => {
     expect(screen.getByText(/@elena_v/i)).toBeDefined()
     expect(screen.getByText(/@marcus_k/i)).toBeDefined()
   })
+
+  it('renders structured shift reason badge when shift_reason is provided', () => {
+    const entryWithShift = {
+      ...mockEntryPrivate,
+      shift_reason: 'empirical_data'
+    }
+
+    render(
+      <TimelineItem 
+        entry={entryWithShift}
+        isSelected={false}
+      />
+    )
+
+    expect(screen.getByText(/Empirical Data/i)).toBeDefined()
+    expect(screen.getByText(/📊/i)).toBeDefined()
+  })
+
+  it('toggles revision audit trail view', async () => {
+    render(
+      <TimelineItem 
+        entry={mockEntryPrivate}
+        isSelected={false}
+      />
+    )
+
+    const historyBtn = screen.getByRole('button', { name: /History/i })
+    expect(historyBtn).toBeDefined()
+
+    await act(async () => {
+      fireEvent.click(historyBtn)
+    })
+
+    expect(screen.getByText(/Immutable Audit Trail/i)).toBeDefined()
+  })
 })
+

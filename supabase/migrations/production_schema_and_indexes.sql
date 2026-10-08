@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS public.private_entries (
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     content TEXT NOT NULL CHECK (char_length(content) <= 5000),
     confidence_rating INT NOT NULL CHECK (confidence_rating >= 0 AND confidence_rating <= 100),
+    shift_reason TEXT DEFAULT NULL CHECK (shift_reason IS NULL OR shift_reason IN ('empirical_evidence', 'counter_argument', 'real_world_event', 'value_shift', 'introspective_review', 'other')),
     entry_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -62,11 +63,33 @@ CREATE TABLE IF NOT EXISTS public.public_posts (
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     content TEXT NOT NULL CHECK (char_length(content) <= 5000),
     confidence_rating INT NOT NULL CHECK (confidence_rating >= 0 AND confidence_rating <= 100),
+    shift_reason TEXT DEFAULT NULL CHECK (shift_reason IS NULL OR shift_reason IN ('empirical_evidence', 'counter_argument', 'real_world_event', 'value_shift', 'introspective_review', 'other')),
     moderation_status TEXT NOT NULL DEFAULT 'pending' CHECK (moderation_status IN ('pending', 'approved', 'flagged', 'rejected')),
     moderation_reason TEXT DEFAULT NULL,
     moderated_at TIMESTAMPTZ DEFAULT NOW(),
     entry_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4b. Immutable Entry Revisions Table (Audit Trail)
+CREATE TABLE IF NOT EXISTS public.entry_revisions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    entry_id UUID NOT NULL REFERENCES public.private_entries(id) ON DELETE CASCADE,
+    prior_content TEXT NOT NULL,
+    prior_confidence INT NOT NULL,
+    prior_shift_reason TEXT DEFAULT NULL,
+    revised_at TIMESTAMPTZ DEFAULT NOW(),
+    revised_by UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE
+);
+
+-- 4c. Transactional Outbox Events Table
+CREATE TABLE IF NOT EXISTS public.outbox_events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    event_type TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    processed_at TIMESTAMPTZ DEFAULT NULL
 );
 
 -- 5. Nudges Table
@@ -486,7 +509,8 @@ CREATE OR REPLACE FUNCTION public.create_entry_transaction(
     p_content TEXT,
     p_confidence INT,
     p_is_public BOOLEAN DEFAULT FALSE,
-    p_entry_date TIMESTAMPTZ DEFAULT NOW()
+    p_entry_date TIMESTAMPTZ DEFAULT NOW(),
+    p_shift_reason TEXT DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -510,19 +534,34 @@ BEGIN
     END IF;
 
     -- 1. Insert private journal entry
-    INSERT INTO public.private_entries (topic_id, user_id, content, confidence_rating, entry_date)
-    VALUES (p_topic_id, v_user_id, p_content, p_confidence, p_entry_date)
+    INSERT INTO public.private_entries (topic_id, user_id, content, confidence_rating, entry_date, shift_reason)
+    VALUES (p_topic_id, v_user_id, p_content, p_confidence, p_entry_date, p_shift_reason)
     RETURNING id INTO v_entry_id;
 
     -- 2. Conditionally insert public post snapshot
     IF p_is_public THEN
-        INSERT INTO public.public_posts (private_entry_id, topic_id, user_id, content, confidence_rating, entry_date)
-        VALUES (v_entry_id, p_topic_id, v_user_id, p_content, p_confidence, p_entry_date)
+        INSERT INTO public.public_posts (private_entry_id, topic_id, user_id, content, confidence_rating, entry_date, shift_reason)
+        VALUES (v_entry_id, p_topic_id, v_user_id, p_content, p_confidence, p_entry_date, p_shift_reason)
         RETURNING id INTO v_public_id;
     END IF;
 
     -- 3. Clear nudges for this topic atomically
     DELETE FROM public.nudges WHERE topic_id = p_topic_id;
+
+    -- 4. Atomically enqueue Transactional Outbox Event
+    INSERT INTO public.outbox_events (event_type, payload)
+    VALUES (
+        'ENTRY_CREATED',
+        jsonb_build_object(
+            'entryId', v_entry_id,
+            'topicId', p_topic_id,
+            'userId', v_user_id,
+            'isPublic', p_is_public,
+            'publicPostId', v_public_id,
+            'shiftReason', p_shift_reason,
+            'confidenceRating', p_confidence
+        )
+    );
 
     SELECT jsonb_build_object(
         'entryId', v_entry_id,
@@ -530,7 +569,8 @@ BEGIN
         'moderationStatus', COALESCE((SELECT moderation_status FROM public.public_posts WHERE id = v_public_id), 'approved'),
         'topicId', p_topic_id,
         'isPublic', p_is_public,
-        'entryDate', p_entry_date
+        'entryDate', p_entry_date,
+        'shiftReason', p_shift_reason
     ) INTO v_result;
 
     RETURN v_result;
@@ -538,8 +578,8 @@ END;
 $$;
 
 -- Grant RPC execution only to authenticated users (block anon / public)
-REVOKE EXECUTE ON FUNCTION public.create_entry_transaction(UUID, TEXT, INT, BOOLEAN, TIMESTAMPTZ) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.create_entry_transaction(UUID, TEXT, INT, BOOLEAN, TIMESTAMPTZ) TO authenticated;
+REVOKE EXECUTE ON FUNCTION public.create_entry_transaction(UUID, TEXT, INT, BOOLEAN, TIMESTAMPTZ, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.create_entry_transaction(UUID, TEXT, INT, BOOLEAN, TIMESTAMPTZ, TEXT) TO authenticated;
 
 -- ---------------------------------------------------------------------------
 -- 9. Handle New User Trigger Function (Auth Helper)

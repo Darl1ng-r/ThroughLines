@@ -21,6 +21,8 @@ const EntryComposer = memo(function EntryComposer({
   onComposeChange,
   composeConfidence,
   setComposeConfidence,
+  composeShiftReason = null,
+  setComposeShiftReason,
   composeVisibility,
   setComposeVisibility,
   onAddEntry,
@@ -147,6 +149,59 @@ const EntryComposer = memo(function EntryComposer({
             {composeConfidence}%
           </span>
         </div>
+
+        {/* Structured Shift Reason Scaffolding */}
+        {setComposeShiftReason && (
+          <div style={{ marginBottom: 12 }}>
+            <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
+              <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkSoft }}>
+                What influenced this conviction? <span style={{ opacity: 0.6 }}>(optional)</span>
+              </span>
+              {composeShiftReason && (
+                <button
+                  type="button"
+                  onClick={() => setComposeShiftReason(null)}
+                  className="tl-mono"
+                  style={{ background: "none", border: "none", fontSize: 10, color: tokens.inkFaint, cursor: "pointer", textDecoration: "underline" }}
+                >
+                  clear
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {[
+                { id: 'empirical_evidence', label: '📊 Empirical Data' },
+                { id: 'counter_argument', label: '⚖️ Counter-Argument' },
+                { id: 'real_world_event', label: '🌍 Real-World Event' },
+                { id: 'value_shift', label: '💡 Value Shift' },
+                { id: 'introspective_review', label: '🔍 Introspection' }
+              ].map(reason => {
+                const isActive = composeShiftReason === reason.id
+                return (
+                  <button
+                    key={reason.id}
+                    type="button"
+                    onClick={() => setComposeShiftReason(isActive ? null : reason.id)}
+                    className="tl-focus btn-premium"
+                    style={{
+                      padding: "3px 9px",
+                      borderRadius: 999,
+                      fontSize: 11.5,
+                      border: isActive ? `1px solid ${tokens.pine}` : `1px solid ${tokens.line}`,
+                      background: isActive ? tokens.pineSoft : tokens.paperDeep,
+                      color: isActive ? tokens.pine : tokens.inkSoft,
+                      fontWeight: isActive ? 600 : 400,
+                      cursor: "pointer",
+                      transition: "all 0.15s ease"
+                    }}
+                  >
+                    {reason.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Community Guidelines Advisory Banner */}
         {composeVisibility === 'public' && moderationResult.isFlagged && (

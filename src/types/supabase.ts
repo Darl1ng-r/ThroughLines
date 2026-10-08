@@ -74,6 +74,7 @@ export interface Database {
           user_id: string
           content: string
           confidence_rating: number
+          shift_reason?: 'empirical_evidence' | 'counter_argument' | 'real_world_event' | 'value_shift' | 'introspective_review' | 'other' | null
           entry_date: string
           created_at?: string
         }
@@ -83,6 +84,7 @@ export interface Database {
           user_id: string
           content: string
           confidence_rating: number
+          shift_reason?: 'empirical_evidence' | 'counter_argument' | 'real_world_event' | 'value_shift' | 'introspective_review' | 'other' | null
           entry_date?: string
           created_at?: string
         }
@@ -92,6 +94,7 @@ export interface Database {
           user_id?: string
           content?: string
           confidence_rating?: number
+          shift_reason?: 'empirical_evidence' | 'counter_argument' | 'real_world_event' | 'value_shift' | 'introspective_review' | 'other' | null
           entry_date?: string
           created_at?: string
         }
@@ -104,6 +107,7 @@ export interface Database {
           user_id: string
           content: string
           confidence_rating: number
+          shift_reason?: 'empirical_evidence' | 'counter_argument' | 'real_world_event' | 'value_shift' | 'introspective_review' | 'other' | null
           moderation_status: 'pending' | 'approved' | 'flagged' | 'rejected'
           moderation_reason?: string | null
           moderated_at?: string | null
@@ -118,6 +122,7 @@ export interface Database {
           user_id: string
           content: string
           confidence_rating: number
+          shift_reason?: 'empirical_evidence' | 'counter_argument' | 'real_world_event' | 'value_shift' | 'introspective_review' | 'other' | null
           moderation_status?: 'pending' | 'approved' | 'flagged' | 'rejected'
           moderation_reason?: string | null
           moderated_at?: string | null
@@ -132,12 +137,68 @@ export interface Database {
           user_id?: string
           content?: string
           confidence_rating?: number
+          shift_reason?: 'empirical_evidence' | 'counter_argument' | 'real_world_event' | 'value_shift' | 'introspective_review' | 'other' | null
           moderation_status?: 'pending' | 'approved' | 'flagged' | 'rejected'
           moderation_reason?: string | null
           moderated_at?: string | null
           entry_date?: string
           fts?: any
           created_at?: string
+        }
+      }
+      entry_revisions: {
+        Row: {
+          id: string
+          entry_id: string
+          prior_content: string
+          prior_confidence: number
+          prior_shift_reason?: string | null
+          revised_at: string
+          revised_by: string
+        }
+        Insert: {
+          id?: string
+          entry_id: string
+          prior_content: string
+          prior_confidence: number
+          prior_shift_reason?: string | null
+          revised_at?: string
+          revised_by: string
+        }
+        Update: {
+          id?: string
+          entry_id?: string
+          prior_content?: string
+          prior_confidence?: number
+          prior_shift_reason?: string | null
+          revised_at?: string
+          revised_by?: string
+        }
+      }
+      outbox_events: {
+        Row: {
+          id: string
+          event_type: string
+          payload: any
+          status: 'pending' | 'processing' | 'completed' | 'failed'
+          created_at: string
+          processed_at?: string | null
+        }
+        Insert: {
+          id?: string
+          event_type: string
+          payload: any
+          status?: 'pending' | 'processing' | 'completed' | 'failed'
+          created_at?: string
+          processed_at?: string | null
+        }
+        Update: {
+          id?: string
+          event_type?: string
+          payload?: any
+          status?: 'pending' | 'processing' | 'completed' | 'failed'
+          created_at?: string
+          processed_at?: string | null
         }
       }
       nudges: {

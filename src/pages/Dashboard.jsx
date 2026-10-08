@@ -113,6 +113,7 @@ export default function Dashboard() {
   const [composeText, setComposeText] = useState("")
   const [composeVisibility, setComposeVisibility] = useState("private")
   const [composeConfidence, setComposeConfidence] = useState(50)
+  const [composeShiftReason, setComposeShiftReason] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   
   const [toastMsg, setToastMsg] = useState("")
@@ -487,7 +488,8 @@ export default function Dashboard() {
         p_content: text,
         p_confidence: confRating,
         p_is_public: isPublic,
-        p_entry_date: entryDate
+        p_entry_date: entryDate,
+        p_shift_reason: composeShiftReason
       })
 
       if (!rpcErr && rpcData && rpcData.entryId) {
@@ -497,6 +499,7 @@ export default function Dashboard() {
           user_id: user.id,
           content: text,
           confidence_rating: confRating,
+          shift_reason: composeShiftReason,
           entry_date: entryDate
         }
         if (isPublic && rpcData.publicPostId) {
@@ -507,6 +510,7 @@ export default function Dashboard() {
             user_id: user.id,
             content: text,
             confidence_rating: confRating,
+            shift_reason: composeShiftReason,
             moderation_status: rpcData.moderationStatus || 'approved',
             entry_date: entryDate
           }
@@ -520,6 +524,7 @@ export default function Dashboard() {
             user_id: user.id,
             content: text,
             confidence_rating: confRating,
+            shift_reason: composeShiftReason,
             entry_date: entryDate
           })
           .select()
@@ -536,6 +541,7 @@ export default function Dashboard() {
               user_id: user.id,
               content: text,
               confidence_rating: confRating,
+              shift_reason: composeShiftReason,
               entry_date: entryDate
             })
             .select()
@@ -582,6 +588,7 @@ export default function Dashboard() {
       // Clear composer and draft cache
       setComposeText("")
       setComposeConfidence(50)
+      setComposeShiftReason(null)
       removeDraft(`draft_${selectedTopic.id}`)
       
       triggerToast(composeVisibility === 'public' ? "Entry added and published!" : "Entry logged privately.")
@@ -994,6 +1001,8 @@ export default function Dashboard() {
                   setComposeConfidence={setComposeConfidence}
                   composeVisibility={composeVisibility}
                   setComposeVisibility={setComposeVisibility}
+                  composeShiftReason={composeShiftReason}
+                  setComposeShiftReason={setComposeShiftReason}
                   onAddEntry={addEntry}
                   submitting={submitting}
                   topicTitle={selectedTopic?.title}

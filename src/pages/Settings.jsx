@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { Settings as SettingsIcon, Save, ArrowLeft } from 'lucide-react'
+import { Settings as SettingsIcon, Save, ArrowLeft, Download, FileText, Database, ShieldCheck } from 'lucide-react'
 import { moderateContent } from '../services/contentModerationService'
+import { supabase } from '../services/supabaseClient'
+import { downloadJSONArchive, downloadMarkdownDigest } from '../services/dataPortabilityService'
 
 const tokens = {
   paper: "var(--color-paper)",
@@ -19,13 +21,16 @@ const tokens = {
 
 export default function Settings() {
   const navigate = useNavigate()
-  const { profile, updateProfile } = useAuth()
+  const { profile, updateProfile, user } = useAuth()
 
   const [displayName, setDisplayName] = useState("")
   const [bio, setBio] = useState("")
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState("")
   const [isError, setIsError] = useState(false)
+  const [exportingJSON, setExportingJSON] = useState(false)
+  const [exportingMD, setExportingMD] = useState(false)
+  const [exportStatus, setExportStatus] = useState("")
 
   useEffect(() => {
     document.title = 'Settings — Throughline'
@@ -35,6 +40,83 @@ export default function Settings() {
     }
   }, [profile])
 
+  async function handleExportJSON() {
+    if (!user) return
+    setExportingJSON(true)
+    setExportStatus("Generating cryptographic JSON archive...")
+    try {
+      const { data: topics, error: tErr } = await supabase
+        .from('topics')
+        .select('*')
+        .eq('user_id', user.id)
+      if (tErr) throw tErr
+
+      const { data: entries, error: eErr } = await supabase
+        .from('private_entries')
+        .select('*, public_posts(*)')
+        .eq('user_id', user.id)
+        .order('entry_date', { ascending: true })
+      if (eErr) throw eErr
+
+      const { data: revisions } = await supabase
+        .from('entry_revisions')
+        .select('*')
+        .eq('revised_by', user.id)
+        .order('revised_at', { ascending: false })
+
+      const { data: outbox } = await supabase
+        .from('outbox_events')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+
+      downloadJSONArchive({
+        profile,
+        topics: topics || [],
+        entries: entries || [],
+        revisions: revisions || [],
+        outbox: outbox || []
+      })
+      setExportStatus("JSON archive downloaded successfully.")
+    } catch (err) {
+      console.error('Export JSON error:', err)
+      setExportStatus("Failed to generate JSON archive.")
+    } finally {
+      setExportingJSON(false)
+    }
+  }
+
+  async function handleExportMarkdown() {
+    if (!user) return
+    setExportingMD(true)
+    setExportStatus("Synthesizing Obsidian / Logseq Markdown digest...")
+    try {
+      const { data: topics, error: tErr } = await supabase
+        .from('topics')
+        .select('*')
+        .eq('user_id', user.id)
+      if (tErr) throw tErr
+
+      const { data: entries, error: eErr } = await supabase
+        .from('private_entries')
+        .select('*, public_posts(*)')
+        .eq('user_id', user.id)
+        .order('entry_date', { ascending: true })
+      if (eErr) throw eErr
+
+      downloadMarkdownDigest({
+        profile,
+        topics: topics || [],
+        entries: entries || []
+      })
+      setExportStatus("Markdown digest downloaded successfully.")
+    } catch (err) {
+      console.error('Export Markdown error:', err)
+      setExportStatus("Failed to generate Markdown digest.")
+    } finally {
+      setExportingMD(false)
+    }
+  }
 
   async function handleSave(e) {
     e.preventDefault()
@@ -188,6 +270,68 @@ export default function Settings() {
               <span>{loading ? "Saving changes..." : "Save changes"}</span>
             </button>
           </form>
+        </div>
+
+        {/* Epistemic Data Portability & Vault Export Card */}
+        <div style={{ background: tokens.card, border: `1px solid ${tokens.line}`, borderRadius: 12, padding: 24, marginTop: 24 }}>
+          <div className="flex items-center gap-2" style={{ marginBottom: 10 }}>
+            <Database size={18} color={tokens.pine} />
+            <h2 className="tl-display" style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>
+              Sovereign Data Portability & Vault Export
+            </h2>
+          </div>
+          <p style={{ fontSize: 13, color: tokens.inkSoft, lineHeight: 1.5, margin: "0 0 16px" }}>
+            Preserve complete ownership of your intellectual trajectory. Export your entire cognitive history with cryptographic timestamps, conviction vectors, and revision logs. Compatible directly with Obsidian, Logseq, and local Markdown notes.
+          </p>
+
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              type="button"
+              onClick={handleExportMarkdown}
+              disabled={exportingMD}
+              className="tl-focus btn-premium flex-1 flex items-center justify-center gap-2"
+              style={{
+                background: tokens.paper,
+                color: tokens.ink,
+                border: `1px solid ${tokens.line}`,
+                borderRadius: 8,
+                padding: "10px 14px",
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: exportingMD ? "not-allowed" : "pointer"
+              }}
+            >
+              <FileText size={15} color={tokens.pine} />
+              <span>{exportingMD ? "Exporting..." : "Obsidian / Logseq Markdown"}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportJSON}
+              disabled={exportingJSON}
+              className="tl-focus btn-premium flex-1 flex items-center justify-center gap-2"
+              style={{
+                background: tokens.paper,
+                color: tokens.ink,
+                border: `1px solid ${tokens.line}`,
+                borderRadius: 8,
+                padding: "10px 14px",
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: exportingJSON ? "not-allowed" : "pointer"
+              }}
+            >
+              <Download size={15} color={tokens.pine} />
+              <span>{exportingJSON ? "Exporting..." : "Full JSON Archive (GDPR)"}</span>
+            </button>
+          </div>
+
+          {exportStatus && (
+            <div className="tl-mono flex items-center gap-1.5" style={{ fontSize: 12, color: tokens.pine, marginTop: 14 }}>
+              <ShieldCheck size={14} />
+              <span>{exportStatus}</span>
+            </div>
+          )}
         </div>
       </div>
     </div>
