@@ -4,7 +4,7 @@ import { supabase } from '../services/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 const ConfidenceChart = lazy(() => import('../components/ConfidenceChart'))
 import ErrorBoundary from '../components/ErrorBoundary'
-import { ArrowLeft, Send, User } from 'lucide-react'
+import { ArrowLeft, User } from 'lucide-react'
 
 import MarkdownText from '../components/MarkdownText'
 
@@ -447,26 +447,7 @@ export default function TopicDetail() {
           </div>
         )}
 
-        {!isSelf && (
-          <button
-            onClick={handleNudge}
-            disabled={nudgeCooldown > 0}
-            className="tl-focus flex items-center gap-2 btn-premium"
-            style={{ 
-              marginTop: 28, 
-              padding: "9px 16px", 
-              borderRadius: 8, 
-              border: `1px solid ${nudgeCooldown > 0 ? tokens.line : tokens.ember}`, 
-              background: nudgeCooldown > 0 ? tokens.paperDeep : tokens.card, 
-              color: nudgeCooldown > 0 ? tokens.inkFaint : tokens.ink, 
-              fontSize: 13, 
-              fontWeight: 500, 
-              cursor: nudgeCooldown > 0 ? "not-allowed" : "pointer" 
-            }}
-          >
-            <Send size={13} /> {nudgeCooldown > 0 ? `Nudge sent (Wait ${nudgeCooldown}s)` : `Nudge @${username} for an update`}
-          </button>
-        )}
+
       </div>
 
       {toastMsg && (
