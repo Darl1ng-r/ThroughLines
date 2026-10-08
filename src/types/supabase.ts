@@ -15,21 +15,27 @@ export interface Database {
           username: string
           display_name: string
           bio: string | null
+          avatar_url: string | null
           created_at?: string
+          updated_at?: string
         }
         Insert: {
           id: string
           username: string
           display_name: string
           bio?: string | null
+          avatar_url?: string | null
           created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
           username?: string
           display_name?: string
           bio?: string | null
+          avatar_url?: string | null
           created_at?: string
+          updated_at?: string
         }
       }
       topics: {
@@ -38,6 +44,8 @@ export interface Database {
           user_id: string
           title: string
           slug: string
+          nudge_cooldown_until: string | null
+          fts?: any
           created_at: string
         }
         Insert: {
@@ -45,6 +53,8 @@ export interface Database {
           user_id: string
           title: string
           slug: string
+          nudge_cooldown_until?: string | null
+          fts?: any
           created_at?: string
         }
         Update: {
@@ -52,6 +62,8 @@ export interface Database {
           user_id?: string
           title?: string
           slug?: string
+          nudge_cooldown_until?: string | null
+          fts?: any
           created_at?: string
         }
       }
@@ -63,6 +75,7 @@ export interface Database {
           content: string
           confidence_rating: number
           entry_date: string
+          created_at?: string
         }
         Insert: {
           id?: string
@@ -71,6 +84,7 @@ export interface Database {
           content: string
           confidence_rating: number
           entry_date?: string
+          created_at?: string
         }
         Update: {
           id?: string
@@ -79,35 +93,45 @@ export interface Database {
           content?: string
           confidence_rating?: number
           entry_date?: string
+          created_at?: string
         }
       }
       public_posts: {
         Row: {
           id: string
+          private_entry_id: string
           topic_id: string
           user_id: string
           content: string
           confidence_rating: number
-          entry_date: string
           moderation_status: 'pending' | 'approved' | 'flagged'
+          entry_date: string
+          fts?: any
+          created_at?: string
         }
         Insert: {
           id?: string
+          private_entry_id: string
           topic_id: string
           user_id: string
           content: string
           confidence_rating: number
-          entry_date?: string
           moderation_status?: 'pending' | 'approved' | 'flagged'
+          entry_date?: string
+          fts?: any
+          created_at?: string
         }
         Update: {
           id?: string
+          private_entry_id?: string
           topic_id?: string
           user_id?: string
           content?: string
           confidence_rating?: number
-          entry_date?: string
           moderation_status?: 'pending' | 'approved' | 'flagged'
+          entry_date?: string
+          fts?: any
+          created_at?: string
         }
       }
       nudges: {
@@ -128,6 +152,24 @@ export interface Database {
           topic_id?: string
           nudger_id?: string
           created_at?: string
+        }
+      }
+    }
+    Functions: {
+      create_entry_transaction: {
+        Args: {
+          p_topic_id: string
+          p_content: string
+          p_confidence: number
+          p_is_public?: boolean
+          p_entry_date?: string
+        }
+        Returns: {
+          entryId: string
+          publicPostId: string | null
+          topicId: string
+          isPublic: boolean
+          entryDate: string
         }
       }
     }

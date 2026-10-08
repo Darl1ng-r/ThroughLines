@@ -1,5 +1,8 @@
-// Supabase Edge Function: Server-Side Content Moderation & AI Synthesis Worker
-// Deployed to Supabase Edge Network (Deno / Serverless)
+// Supabase Edge Function: Content Moderation Webhook Endpoint
+// Note: Primary synchronous database-level spam & keyword moderation is enforced
+// directly inside PostgreSQL via `trigger_moderate_public_post` (see production_schema_and_indexes.sql).
+// This Edge Function is preserved as an external webhook receiver for asynchronous
+// deep-learning moderation pipelines (e.g. OpenAI moderation, Perspective API).
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 

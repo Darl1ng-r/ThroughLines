@@ -77,10 +77,11 @@ class SupabaseAdapter:
         for a in agents:
             clean_bio = a.bio.replace("'", "''")
             clean_name = a.display_name.replace("'", "''")
+            avatar = getattr(a, 'avatar_url', '')
             lines.append(
-                f"INSERT INTO public.profiles (id, username, display_name, bio) "
-                f"VALUES ('{a.id}', '{a.username}', '{clean_name}', '{clean_bio}') "
-                f"ON CONFLICT (id) DO UPDATE SET display_name = EXCLUDED.display_name, bio = EXCLUDED.bio, username = EXCLUDED.username;"
+                f"INSERT INTO public.profiles (id, username, display_name, bio, avatar_url) "
+                f"VALUES ('{a.id}', '{a.username}', '{clean_name}', '{clean_bio}', '{avatar}') "
+                f"ON CONFLICT (id) DO UPDATE SET display_name = EXCLUDED.display_name, bio = EXCLUDED.bio, username = EXCLUDED.username, avatar_url = EXCLUDED.avatar_url;"
             )
 
         # 3. Topics & Entries
@@ -152,6 +153,7 @@ class SupabaseAdapter:
                     "username": a.username,
                     "display_name": a.display_name,
                     "bio": a.bio,
+                    "avatar_url": getattr(a, 'avatar_url', ''),
                     "epistemic_style": a.epistemic_style,
                     "topics": list(a.active_topics.values())
                 }
@@ -170,7 +172,8 @@ class SupabaseAdapter:
                     "id": a.id,
                     "username": a.username,
                     "display_name": a.display_name,
-                    "bio": a.bio
+                    "bio": a.bio,
+                    "avatar_url": getattr(a, 'avatar_url', '')
                 }).execute()
 
                 for slug, topic in a.active_topics.items():

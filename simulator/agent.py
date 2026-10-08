@@ -19,6 +19,7 @@ class ThroughlineAgent:
         self.username = persona["username"]
         self.display_name = persona["display_name"]
         self.bio = persona.get("bio", "")
+        self.avatar_url = persona.get("avatar_url", "")
         self.epistemic_style = persona.get("epistemic_style", "Balanced Thinker")
         self.conviction_volatility = persona.get("conviction_volatility", "medium")
         self.core_domains = persona.get("core_domains", [])

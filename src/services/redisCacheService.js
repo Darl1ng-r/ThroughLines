@@ -23,6 +23,25 @@ const isTestEnv = import.meta.env.MODE === 'test'
 // Proxy URL: defaults to the Nginx /api/cache/ reverse proxy or Edge Function.
 const PROXY_CACHE_URL = isTestEnv ? null : (import.meta.env.VITE_REDIS_PROXY_URL || null)
 
+import { supabase } from './supabaseClient'
+
+/**
+ * Helper to build headers with active Supabase user session token
+ * to satisfy Supabase Edge Function authentication requirements.
+ */
+async function getProxyHeaders() {
+  const headers = { 'Content-Type': 'application/json' }
+  try {
+    if (supabase && supabase.auth) {
+      const { data } = await supabase.auth.getSession()
+      if (data?.session?.access_token) {
+        headers['Authorization'] = `Bearer ${data.session.access_token}`
+      }
+    }
+  } catch (_) {}
+  return headers
+}
+
 /**
  * Retrieve cached value synchronously from L1 in-memory cache if not expired.
  * @param {string} key
@@ -59,9 +78,10 @@ export async function getCache(key) {
 
   if (PROXY_CACHE_URL) {
     try {
+      const headers = await getProxyHeaders()
       const res = await fetch(`${PROXY_CACHE_URL}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ action: 'get', key })
       })
       if (res.ok) {
@@ -102,9 +122,10 @@ export async function setCache(key, value, ttlSeconds = 60) {
 
   if (PROXY_CACHE_URL) {
     try {
+      const headers = await getProxyHeaders()
       await fetch(`${PROXY_CACHE_URL}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ action: 'set', key, value, ttl: ttlSeconds })
       })
     } catch (_) {
@@ -123,9 +144,10 @@ export async function invalidateCache(key) {
 
   if (PROXY_CACHE_URL) {
     try {
+      const headers = await getProxyHeaders()
       await fetch(`${PROXY_CACHE_URL}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ action: 'del', key })
       })
     } catch (_) {}

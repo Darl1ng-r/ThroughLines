@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "seed:virtual-users": "python3 simulator/cli.py --agents 8 --rounds 5",
+    "simulate": "python3 simulator/cli.py"
   },
   "dependencies": {
     "@sentry/react": "^10.73.0",
