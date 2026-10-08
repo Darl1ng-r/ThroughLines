@@ -1,6 +1,7 @@
 import React, { memo, useState } from 'react'
 import MarkdownText from '../MarkdownText'
 import { Lock, Globe, AlertCircle, Edit3, Check, X } from 'lucide-react'
+import { moderateContent } from '../../services/contentModerationService'
 
 const tokens = {
   paper: "var(--color-paper)",
@@ -88,11 +89,21 @@ const TimelineItem = memo(function TimelineItem({
   } catch (_) {}
 
   async function handleSaveEdit() {
-    if (!editContent.trim() || saving) return
+    const trimmed = editContent.trim()
+    if (!trimmed || saving) return
+
+    if (isPublic) {
+      const contentMod = moderateContent(trimmed)
+      if (!contentMod.isValid) {
+        alert(`Cannot save public entry: ${contentMod.reason}`)
+        return
+      }
+    }
+
     try {
       setSaving(true)
       if (onUpdate) {
-        await onUpdate(entry.id, editContent.trim(), Number(editConfidence))
+        await onUpdate(entry.id, trimmed, Number(editConfidence))
       }
       setIsEditing(false)
     } catch (err) {

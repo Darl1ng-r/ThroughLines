@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { Settings as SettingsIcon, Save, ArrowLeft } from 'lucide-react'
+import { moderateContent } from '../services/contentModerationService'
 
 const tokens = {
   paper: "var(--color-paper)",
@@ -42,6 +43,22 @@ export default function Settings() {
     setLoading(true)
     setMessage("")
     setIsError(false)
+
+    const nameMod = moderateContent(displayName)
+    if (!nameMod.isValid) {
+      setIsError(true)
+      setMessage(`Display name contains flagged language: ${nameMod.category}`)
+      setLoading(false)
+      return
+    }
+
+    const bioMod = moderateContent(bio)
+    if (!bioMod.isValid) {
+      setIsError(true)
+      setMessage(`Profile bio contains flagged language: ${bioMod.category}`)
+      setLoading(false)
+      return
+    }
 
     try {
       await updateProfile({

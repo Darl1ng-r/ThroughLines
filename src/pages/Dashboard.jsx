@@ -11,6 +11,7 @@ import TimelineItem from '../components/dashboard/TimelineItem'
 import { getDraft, saveDraft, removeDraft } from '../services/draftStorage'
 import { publishEvent, EVENTS } from '../services/eventBusService'
 import { sendNativeNotification, requestNotificationPermission } from '../services/notificationService'
+import { moderateContent } from '../services/contentModerationService'
 import { 
   Lock, 
   Globe, 
@@ -376,6 +377,12 @@ export default function Dashboard() {
     const title = newTopicTitle.trim()
     if (!title) return
 
+    const titleMod = moderateContent(title)
+    if (!titleMod.isValid) {
+      triggerToast(`Topic title contains flagged language: ${titleMod.category}`)
+      return
+    }
+
     const slug = title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
@@ -402,8 +409,15 @@ export default function Dashboard() {
   }
 
   async function renameTopic(topicId, newTitle) {
+    const trimmed = (newTitle || '').trim()
+    const titleMod = moderateContent(trimmed)
+    if (!titleMod.isValid) {
+      triggerToast(`Topic title contains flagged language: ${titleMod.category}`)
+      return
+    }
+
     try {
-      const slug = newTitle
+      const slug = trimmed
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/(^-|-$)/g, '') || 'throughline'
@@ -450,10 +464,18 @@ export default function Dashboard() {
     const text = composeText.trim()
     if (!text || !selectedTopic || submitting) return
 
+    const isPublic = composeVisibility === 'public'
+    if (isPublic) {
+      const contentMod = moderateContent(text)
+      if (!contentMod.isValid) {
+        triggerToast(`Cannot publish publicly: ${contentMod.reason}`)
+        return
+      }
+    }
+
     try {
       setSubmitting(true)
       const entryDate = new Date().toISOString()
-      const isPublic = composeVisibility === 'public'
       const confRating = Number(composeConfidence)
 
       let entry = null
@@ -485,7 +507,7 @@ export default function Dashboard() {
             user_id: user.id,
             content: text,
             confidence_rating: confRating,
-            moderation_status: 'approved',
+            moderation_status: rpcData.moderationStatus || 'approved',
             entry_date: entryDate
           }
         }
@@ -572,6 +594,12 @@ export default function Dashboard() {
   }
 
   async function publishEntry(entry) {
+    const contentMod = moderateContent(entry.content)
+    if (!contentMod.isValid) {
+      triggerToast(`Cannot publish entry: contains language flagged under ${contentMod.category}`)
+      return
+    }
+
     try {
       const { data, error } = await supabase
         .from('public_posts')
@@ -633,6 +661,11 @@ export default function Dashboard() {
       let updatedPubPosts = []
 
       if (targetEntry && targetEntry.public_posts && targetEntry.public_posts.length > 0) {
+        const contentMod = moderateContent(updatedContent)
+        if (!contentMod.isValid) {
+          triggerToast(`Updated public entry contains flagged language: ${contentMod.category}`)
+          return
+        }
         const publicPostId = targetEntry.public_posts[0].id
         const { data: pubData, error: pubErr } = await supabase
           .from('public_posts')

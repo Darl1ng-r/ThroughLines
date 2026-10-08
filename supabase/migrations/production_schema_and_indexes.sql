@@ -96,9 +96,12 @@ BEGIN
     SELECT COUNT(*) INTO http_count
     FROM regexp_matches(NEW.content, 'https?://', 'g');
 
-    is_spam := (CHAR_LENGTH(NEW.content) > 4500)
+    is_spam := (CHAR_LENGTH(NEW.content) > 5000)
             OR (http_count > 3)
-            OR (NEW.content ~* '\m(casino|crypto-airdrop|free-followers|phishing)\M');
+            OR (NEW.content ~* '\m(casino|crypto-?airdrop|free-?followers|phishing|whatsapp investment|telegram signals)\M')
+            OR (NEW.content ~* '\m(f+u+c+k+[a-z]*|b+i+t+c+h+e?s?|b+a+s+t+a+r+d+s?|c+u+n+t+s?|a+s+s+h+o+l+e+s?|p+u+s+s+y|d+i+c+k+h+e+a+d+)\M')
+            OR (NEW.content ~* '\m(n+i+g+g+[ea]+r+|n+i+g+g+a+|k+i+k+e+|ch+i+n+k+|f+a+g+g+o+t+|f+a+g+s?|d+y+k+e+s?|t+r+a+n+n+y|r+e+t+a+r+d+[es]?)\M')
+            OR (NEW.content ~* '(kill\s+(your|ur)self|commit\s+suicide|i\s+will\s+(kill|murder|shoot|stab)\s+(you|u)|slit\s+(your|ur)?\s*throat)');
 
     IF is_spam THEN
         NEW.moderation_status := 'flagged';
@@ -394,6 +397,7 @@ BEGIN
     SELECT jsonb_build_object(
         'entryId', v_entry_id,
         'publicPostId', v_public_id,
+        'moderationStatus', COALESCE((SELECT moderation_status FROM public.public_posts WHERE id = v_public_id), 'approved'),
         'topicId', p_topic_id,
         'isPublic', p_is_public,
         'entryDate', p_entry_date

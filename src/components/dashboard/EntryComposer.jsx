@@ -1,5 +1,6 @@
 import React, { memo } from 'react'
-import { PenLine, Send, Lock, Globe } from 'lucide-react'
+import { PenLine, Send, Lock, Globe, AlertCircle } from 'lucide-react'
+import { moderateContent } from '../../services/contentModerationService'
 
 const tokens = {
   paper: "var(--color-paper)",
@@ -28,6 +29,10 @@ const EntryComposer = memo(function EntryComposer({
   nudgeCount = 0
 }) {
   const sliderColor = composeConfidence >= 70 ? tokens.pine : composeConfidence >= 40 ? '#56826E' : tokens.ember
+
+  // Moderation check on active composition text
+  const moderationResult = moderateContent(composeText)
+  const isBlockedByModeration = composeVisibility === 'public' && moderationResult.isFlagged
 
   return (
     <div className="flex gap-4" style={{ position: "relative" }}>
@@ -143,6 +148,29 @@ const EntryComposer = memo(function EntryComposer({
           </span>
         </div>
 
+        {/* Community Guidelines Advisory Banner */}
+        {composeVisibility === 'public' && moderationResult.isFlagged && (
+          <div 
+            className="flex items-start gap-2"
+            style={{
+              marginBottom: 12,
+              padding: "9px 12px",
+              borderRadius: 8,
+              background: "rgba(140, 74, 58, 0.08)",
+              border: "1px solid rgba(140, 74, 58, 0.28)",
+              color: "var(--color-danger, #8C4A3A)",
+              fontSize: 12.5,
+              lineHeight: 1.45
+            }}
+          >
+            <AlertCircle size={15} style={{ marginTop: 2, flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <strong style={{ fontWeight: 600 }}>Community Notice:</strong>{" "}
+              {moderationResult.reason} Please rephrase to publish publicly, or toggle to <strong>Private</strong>.
+            </div>
+          </div>
+        )}
+
         {/* Visibility and Save Buttons */}
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-1" role="radiogroup" aria-label="Entry visibility" style={{ background: tokens.paperDeep, borderRadius: 999, padding: 3 }}>
@@ -194,17 +222,18 @@ const EntryComposer = memo(function EntryComposer({
             type="button"
             onClick={onAddEntry}
             aria-label={submitting ? "Logging entry..." : "Log entry"}
-            disabled={!composeText.trim() || submitting}
+            disabled={!composeText.trim() || submitting || isBlockedByModeration}
             className="tl-focus btn-premium flex items-center gap-1"
+            title={isBlockedByModeration ? "Please rephrase flagged content or set visibility to Private" : undefined}
             style={{ 
-              background: (composeText.trim() && !submitting) ? tokens.pine : tokens.line, 
-              color: (composeText.trim() && !submitting) ? tokens.paper : tokens.inkFaint, 
+              background: (composeText.trim() && !submitting && !isBlockedByModeration) ? tokens.pine : tokens.line, 
+              color: (composeText.trim() && !submitting && !isBlockedByModeration) ? tokens.paper : tokens.inkFaint, 
               border: "none", 
               borderRadius: 8, 
               padding: "7px 14px", 
               fontSize: 13, 
               fontWeight: 500, 
-              cursor: (composeText.trim() && !submitting) ? "pointer" : "not-allowed" 
+              cursor: (composeText.trim() && !submitting && !isBlockedByModeration) ? "pointer" : "not-allowed" 
             }}
           >
             <Send size={13} /> {submitting ? "Logging entry..." : "Log entry"}
