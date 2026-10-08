@@ -107,5 +107,20 @@ describe('CommandPalette', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(onClose).toHaveBeenCalled()
   })
+
+  it('renders overlay with fixed positioning to prevent document layout shift', () => {
+    const { container } = renderWithRouter(
+      <CommandPalette 
+        isOpen={true} 
+        onClose={vi.fn()} 
+        topics={mockTopics}
+      />
+    )
+
+    const overlay = container.firstChild
+    expect(overlay).not.toBeNull()
+    expect(overlay.style.position).toBe('fixed')
+    expect(overlay.style.zIndex).toBe('10000')
+  })
 })
 

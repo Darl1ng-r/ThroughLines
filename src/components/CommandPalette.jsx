@@ -48,7 +48,7 @@ export default function CommandPalette({
     if (isOpen) {
       setQuery('')
       setSelectedIndex(0)
-      setTimeout(() => inputRef.current?.focus(), 50)
+      setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 50)
     }
   }, [isOpen])
 
@@ -175,15 +175,26 @@ export default function CommandPalette({
 
   return (
     <div 
-      className="fixed inset-0 flex items-start justify-center"
+      className="tl-modal-overlay"
       style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: "100vw",
+        height: "100vh",
         zIndex: 10000,
-        background: "rgba(10, 15, 12, 0.55)",
+        display: "flex",
+        alignItems: "flex-start",
+        justifyContent: "center",
+        paddingTop: "12vh",
+        paddingLeft: "16px",
+        paddingRight: "16px",
+        background: "rgba(10, 15, 12, 0.65)",
         backdropFilter: "blur(8px)",
         WebkitBackdropFilter: "blur(8px)",
-        paddingTop: "14vh",
-        paddingLeft: "16px",
-        paddingRight: "16px"
+        overflowY: "auto"
       }}
       onClick={onClose}
     >
