@@ -693,7 +693,7 @@ export default function Dashboard() {
       />
 
       {/* Main Workspace - Entries and Line Graph */}
-      <div className="tl-scroll" style={{ flex: 1, overflowY: "auto", maxHeight: "calc(100vh - 58px)" }}>
+      <div className="tl-scroll tl-ambient-glow" style={{ flex: 1, overflowY: "auto", maxHeight: "calc(100vh - 58px)" }}>
         {!selectedTopic ? (
           <div className="flex flex-col items-center justify-center" style={{ height: "100%", padding: 40, textAlign: "center" }}>
             <p className="tl-display" style={{ fontSize: 20, color: tokens.inkSoft }}>🌿 Pick a throughline, or start a new theme.</p>

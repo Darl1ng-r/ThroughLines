@@ -25,10 +25,11 @@ const tokens = {
 }
 
 function Meter({ value }) {
+  const barColor = value >= 70 ? tokens.pine : value >= 40 ? "#56826E" : tokens.ember
   return (
     <div className="flex items-center gap-2">
-      <div style={{ width: 46, height: 4, borderRadius: 2, background: tokens.line, overflow: "hidden" }}>
-        <div style={{ width: `${value}%`, height: "100%", background: tokens.pine }} />
+      <div style={{ width: 48, height: 5, borderRadius: 3, background: tokens.line, overflow: "hidden" }}>
+        <div style={{ width: `${value}%`, height: "100%", background: barColor, borderRadius: 3, transition: "width 0.3s ease" }} />
       </div>
       <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkSoft }}>{value}% sure</span>
     </div>
@@ -229,7 +230,7 @@ export default function TopicDetail() {
   }))
 
   return (
-    <div className="tl-scroll" style={{ flex: 1, overflowY: "auto", maxHeight: "calc(100vh - 58px)" }}>
+    <div className="tl-scroll tl-ambient-glow" style={{ flex: 1, overflowY: "auto", maxHeight: "calc(100vh - 58px)" }}>
       <div style={{ maxWidth: 640, margin: "0 auto", padding: "28px 24px 80px" }}>
         <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: 20 }}>
           <button 
@@ -242,19 +243,43 @@ export default function TopicDetail() {
 
           <button
             onClick={() => navigate(`/${username}`)}
-            className="tl-focus btn-premium flex items-center gap-1.5"
+            className="tl-focus btn-premium flex items-center gap-2"
             style={{
               background: tokens.paperDeep,
               border: `1px solid ${tokens.line}`,
               borderRadius: 999,
-              padding: "4px 12px",
+              padding: "4px 12px 4px 6px",
               fontSize: 12,
               color: tokens.ink,
               cursor: "pointer"
             }}
             title={`View ${profile?.display_name || username}'s full profile`}
           >
-            <User size={13} color={tokens.pine} />
+            {profile?.avatar_url ? (
+              <img
+                src={profile.avatar_url}
+                alt={profile.display_name || username}
+                style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover" }}
+                onError={(e) => { e.currentTarget.style.display = 'none' }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: "50%",
+                  background: tokens.pineSoft,
+                  color: tokens.pine,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 11,
+                  fontWeight: 600
+                }}
+              >
+                {(profile?.display_name || username || 'U')[0].toUpperCase()}
+              </div>
+            )}
             <span style={{ fontWeight: 500 }}>@{username}</span>
             <span style={{ fontSize: 11, color: tokens.inkFaint }}>profile →</span>
           </button>
@@ -356,7 +381,7 @@ export default function TopicDetail() {
             />
             
             <div className="flex flex-col gap-6">
-              {posts.map((entry) => {
+              {posts.map((entry, index) => {
                 let formattedDate = entry.entry_date
                 try {
                   const d = new Date(entry.entry_date)
@@ -366,20 +391,42 @@ export default function TopicDetail() {
                 } catch (_) {}
 
                 const isSelected = selectedEntryId === entry.id
+                const isLatest = index === posts.length - 1
+                const nodeColor = isSelected 
+                  ? tokens.ember 
+                  : (entry.confidence_rating >= 70 ? tokens.pine : entry.confidence_rating >= 40 ? '#56826E' : tokens.ember)
 
                 return (
                   <div id={`entry-${entry.id}`} key={entry.id} className="tl-entry flex gap-4" style={{ position: "relative" }}>
-                    <div style={{ 
-                      width: 12, 
-                      height: 12, 
-                      borderRadius: "50%", 
-                      background: isSelected ? tokens.ember : tokens.pine, 
-                      border: `2px solid ${isSelected ? tokens.ember : tokens.pine}`, 
-                      flexShrink: 0, 
-                      marginTop: 6 
-                    }} />
+                    <div 
+                      style={{ 
+                        width: 12, 
+                        height: 12, 
+                        borderRadius: "50%", 
+                        background: isSelected ? tokens.ember : nodeColor, 
+                        border: `2.5px solid ${isSelected ? tokens.ember : nodeColor}`, 
+                        boxShadow: isLatest 
+                          ? `0 0 0 3px ${nodeColor}33, 0 0 8px ${nodeColor}44` 
+                          : (isSelected ? `0 0 0 3px ${tokens.ember}33` : "none"),
+                        flexShrink: 0, 
+                        marginTop: 6,
+                        transition: "all 0.25s ease"
+                      }} 
+                      title={`${entry.confidence_rating}% conviction`}
+                    />
                     
-                    <div style={{ flex: 1, background: tokens.card, border: isSelected ? `2px solid ${tokens.ember}` : `1px solid ${tokens.line}`, borderRadius: 10, padding: "14px 16px" }}>
+                    <div 
+                      className="tl-card tl-card-interactive"
+                      style={{ 
+                        flex: 1, 
+                        background: tokens.card, 
+                        border: isSelected ? `2px solid ${tokens.ember}` : `1px solid ${tokens.line}`, 
+                        borderRadius: 12, 
+                        padding: "16px 18px",
+                        boxShadow: isSelected ? "var(--shadow-hover)" : "var(--shadow-card)",
+                        transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)"
+                      }}
+                    >
                       <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
                         <div className="flex items-center gap-3">
                           <span className="tl-mono" style={{ fontSize: 12, color: tokens.inkFaint }}>

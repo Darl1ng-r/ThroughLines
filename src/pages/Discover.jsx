@@ -4,6 +4,7 @@ import { supabase } from '../services/supabaseClient'
 import { ArrowUpRight, Compass, Search, Bookmark, Share2 } from 'lucide-react'
 import { getCache, setCache, invalidateCache, getSyncCache } from '../services/redisCacheService'
 import { searchFeed } from '../services/semanticSearchService'
+import MiniSparkline from '../components/MiniSparkline'
 
 // Preload ConfidenceChart bundle ahead of user click
 const preloadConfidenceChart = () => {
@@ -161,7 +162,8 @@ export default function Discover() {
           profiles (
             username,
             display_name,
-            bio
+            bio,
+            avatar_url
           ),
           public_posts!inner (
             id,
@@ -270,8 +272,9 @@ export default function Discover() {
   }, [filteredFeed])
 
   return (
-    <div className="tl-scroll" style={{ flex: 1, overflowY: "auto", maxHeight: "calc(100vh - 58px)" }}>
-      <div style={{ maxWidth: 640, margin: "0 auto", padding: "36px 24px 80px" }}>
+    <div className="tl-scroll" style={{ flex: 1, overflowY: "auto", maxHeight: "calc(100vh - 58px)", position: "relative" }}>
+      <div className="tl-ambient-glow" aria-hidden="true" />
+      <div style={{ maxWidth: 660, margin: "0 auto", padding: "36px 24px 80px", position: "relative", zIndex: 1 }}>
         <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: 4 }}>
           <div className="flex items-center gap-2">
             <Compass size={24} color={tokens.pine} />
@@ -397,37 +400,59 @@ export default function Discover() {
               return (
                 <div 
                   key={topic.id} 
-                  className="tl-entry"
+                  className="tl-entry tl-card-interactive"
                   onMouseEnter={preloadConfidenceChart}
                   style={{ 
-                    background: tokens.card, 
-                    border: `1px solid ${tokens.line}`, 
-                    borderRadius: 10, 
-                    padding: "16px 18px", 
-                    boxShadow: "0 2px 8px rgba(33, 31, 27, 0.02)"
+                    padding: "20px 22px",
+                    position: "relative"
                   }}
                 >
-                  <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
-                    <div className="flex items-center gap-2">
-                      <button 
+                  <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
+                    <div className="flex items-center gap-2.5">
+                      <button
                         onClick={() => navigate(`/${topic.profiles?.username}`)}
-                        className="tl-mono tl-focus"
-                        style={{ 
-                          fontSize: 12, 
-                          color: tokens.pine, 
-                          background: "none", 
-                          border: "none", 
-                          cursor: "pointer", 
-                          fontWeight: 600, 
-                          padding: 0 
-                        }}
+                        className="tl-focus"
+                        style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                        title={`View ${topic.profiles?.display_name || topic.profiles?.username}'s profile`}
                       >
-                        @{topic.profiles?.username || 'anonymous'}
+                        {topic.profiles?.avatar_url ? (
+                          <img 
+                            src={topic.profiles.avatar_url} 
+                            alt={topic.profiles.username} 
+                            className="tl-avatar"
+                          />
+                        ) : (
+                          <div className="tl-avatar">
+                            {(topic.profiles?.display_name || topic.profiles?.username || 'T').charAt(0).toUpperCase()}
+                          </div>
+                        )}
                       </button>
+
+                      <div className="flex flex-col" style={{ lineHeight: 1.25 }}>
+                        <button 
+                          onClick={() => navigate(`/${topic.profiles?.username}`)}
+                          className="tl-focus"
+                          style={{ 
+                            fontSize: 13, 
+                            color: tokens.ink, 
+                            background: "none", 
+                            border: "none", 
+                            cursor: "pointer", 
+                            fontWeight: 600, 
+                            textAlign: "left",
+                            padding: 0 
+                          }}
+                        >
+                          {topic.profiles?.display_name || topic.profiles?.username}
+                        </button>
+                        <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint }}>
+                          @{topic.profiles?.username || 'anonymous'}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-3">
-                      <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint }}>
+                      <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint, background: tokens.paperDeep, padding: "2px 8px", borderRadius: 6 }}>
                         {topic.span}
                       </span>
                       
@@ -435,7 +460,7 @@ export default function Discover() {
                         onClick={() => toggleBookmark(topic.id)}
                         className="tl-focus btn-premium flex items-center justify-center"
                         title={isBookmarked ? "Remove bookmark" : "Save bookmark"}
-                        style={{ border: "none", background: "transparent", cursor: "pointer", color: isBookmarked ? tokens.pine : tokens.inkFaint, padding: 2 }}
+                        style={{ border: "none", background: "transparent", cursor: "pointer", color: isBookmarked ? tokens.pine : tokens.inkFaint, padding: 4 }}
                       >
                         <Bookmark size={15} fill={isBookmarked ? tokens.pine : "none"} />
                       </button>
@@ -447,36 +472,40 @@ export default function Discover() {
                     style={{ 
                       fontSize: 18, 
                       fontWeight: 600, 
-                      margin: "0 0 8px", 
+                      margin: "0 0 10px", 
                       cursor: "pointer", 
-                      color: tokens.ink 
+                      color: tokens.ink,
+                      lineHeight: 1.35
                     }}
                     onClick={() => handleOpenTopic(topic)}
                   >
                     {topic.title}
                   </h3>
                   
-                  <p style={{ fontSize: 14, lineHeight: 1.55, color: tokens.ink, margin: "0 0 12px" }}>
+                  <p style={{ fontSize: 14, lineHeight: 1.6, color: tokens.inkSoft, margin: "0 0 16px" }}>
                     {topic.latestPost?.content}
                   </p>
                   
-                  <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center justify-between flex-wrap gap-3" style={{ paddingTop: 12, borderTop: `1px solid ${tokens.line}` }}>
                     <div className="flex items-center gap-3">
-                      <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint }}>
-                        Latest confidence: <strong style={{ color: tokens.pine }}>{topic.latestConfidence}%</strong>
-                      </span>
-                      {topic.delta > 0 && (
-                        <span className="tl-mono" style={{ fontSize: 11, color: tokens.plum }}>
-                          ({topic.delta}% overall shift)
+                      <MiniSparkline data={topic.public_posts} width={88} height={24} />
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="tl-mono" style={{ fontSize: 12, color: tokens.ink }}>
+                          <strong style={{ color: tokens.pine, fontWeight: 600 }}>{topic.latestConfidence}%</strong> conviction
                         </span>
-                      )}
+                        {topic.delta > 0 && (
+                          <span className="tl-mono" style={{ fontSize: 11, color: tokens.plum, opacity: 0.9 }}>
+                            ({topic.delta}% shift)
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2.5">
                       <button
                         onClick={() => handleShare(topic)}
                         className="tl-focus btn-premium flex items-center gap-1"
-                        style={{ border: "none", background: "none", cursor: "pointer", color: tokens.inkSoft, fontSize: 12, fontWeight: 500, padding: 0 }}
+                        style={{ border: "none", background: "none", cursor: "pointer", color: tokens.inkSoft, fontSize: 12, fontWeight: 500, padding: "4px 8px" }}
                       >
                         <Share2 size={13} /> Share
                       </button>
@@ -486,15 +515,16 @@ export default function Discover() {
                         className="tl-focus flex items-center gap-1 btn-premium" 
                         style={{ 
                           border: "none", 
-                          background: "none", 
+                          background: tokens.pineSoft, 
+                          color: tokens.pine,
+                          borderRadius: 6,
+                          padding: "5px 11px",
                           cursor: "pointer", 
-                          color: tokens.pine, 
-                          fontSize: 13, 
-                          fontWeight: 500, 
-                          padding: 0 
+                          fontSize: 12, 
+                          fontWeight: 600, 
                         }}
                       >
-                        Read timeline <ArrowUpRight size={13} />
+                        Read throughline <ArrowUpRight size={13} />
                       </button>
                     </div>
                   </div>

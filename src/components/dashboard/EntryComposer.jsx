@@ -27,10 +27,33 @@ const EntryComposer = memo(function EntryComposer({
   topicTitle = "",
   nudgeCount = 0
 }) {
+  const sliderColor = composeConfidence >= 70 ? tokens.pine : composeConfidence >= 40 ? '#56826E' : tokens.ember
+
   return (
     <div className="flex gap-4" style={{ position: "relative" }}>
-      <div style={{ width: 12, height: 12, borderRadius: "50%", border: `2px dashed ${tokens.ember}`, marginTop: 6, flexShrink: 0 }} />
-      <div style={{ flex: 1, background: tokens.card, border: `1px solid ${tokens.line}`, borderRadius: 10, padding: "16px 18px" }}>
+      <div 
+        style={{ 
+          width: 12, 
+          height: 12, 
+          borderRadius: "50%", 
+          border: `2px dashed ${tokens.ember}`, 
+          boxShadow: `0 0 0 2px ${tokens.emberSoft}`,
+          marginTop: 6, 
+          flexShrink: 0 
+        }} 
+      />
+      <div 
+        className="tl-card tl-card-interactive"
+        style={{ 
+          flex: 1, 
+          background: tokens.card, 
+          border: `1px solid ${tokens.line}`, 
+          borderRadius: 12, 
+          padding: "16px 18px",
+          boxShadow: "var(--shadow-card)",
+          transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)"
+        }}
+      >
         <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: 8 }}>
           <div className="flex items-center gap-1.5 flex-wrap" style={{ color: tokens.inkSoft }}>
             <PenLine size={13} />
@@ -90,20 +113,35 @@ const EntryComposer = memo(function EntryComposer({
         {/* Confidence Slider */}
         <div className="flex items-center gap-3" style={{ marginBottom: 12 }}>
           <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkSoft, whiteSpace: "nowrap" }}>How sure?</span>
-          <input 
-            type="range" 
-            min="0" 
-            max="100" 
-            disabled={submitting}
-            value={composeConfidence} 
-            aria-label="Confidence rating percentage"
-            aria-valuenow={composeConfidence}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            onChange={(e) => setComposeConfidence(Number(e.target.value))} 
-            className="tl-range tl-focus" 
-          />
-          <span className="tl-mono" style={{ fontSize: 12, color: tokens.ink, width: 34, textAlign: "right" }}>
+          <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center" }}>
+            <input 
+              type="range" 
+              min="0" 
+              max="100" 
+              disabled={submitting}
+              value={composeConfidence} 
+              aria-label="Confidence rating percentage"
+              aria-valuenow={composeConfidence}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              onChange={(e) => setComposeConfidence(Number(e.target.value))} 
+              className="tl-range tl-focus" 
+              style={{
+                background: `linear-gradient(to right, ${sliderColor} 0%, ${sliderColor} ${composeConfidence}%, var(--color-line) ${composeConfidence}%, var(--color-line) 100%)`
+              }}
+            />
+          </div>
+          <span 
+            className="tl-mono" 
+            style={{ 
+              fontSize: 12, 
+              fontWeight: 600,
+              color: sliderColor, 
+              width: 40, 
+              textAlign: "right",
+              transition: "color 0.2s ease"
+            }}
+          >
             {composeConfidence}%
           </span>
         </div>

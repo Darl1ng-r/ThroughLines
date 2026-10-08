@@ -17,10 +17,11 @@ const tokens = {
 }
 
 function Meter({ value }) {
+  const barColor = value >= 70 ? tokens.pine : value >= 40 ? "#56826E" : tokens.ember
   return (
     <div className="flex items-center gap-2">
-      <div style={{ width: 46, height: 4, borderRadius: 2, background: tokens.line, overflow: "hidden" }}>
-        <div style={{ width: `${value}%`, height: "100%", background: tokens.pine }} />
+      <div style={{ width: 48, height: 5, borderRadius: 3, background: tokens.line, overflow: "hidden" }}>
+        <div style={{ width: `${value}%`, height: "100%", background: barColor, borderRadius: 3, transition: "width 0.3s ease" }} />
       </div>
       <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkSoft }}>{value}% sure</span>
     </div>
@@ -74,6 +75,10 @@ const TimelineItem = memo(function TimelineItem({
   const [editConfidence, setEditConfidence] = useState(entry.confidence_rating)
   const [saving, setSaving] = useState(false)
 
+  const nodeColor = isSelected 
+    ? tokens.ember 
+    : (entry.confidence_rating >= 70 ? tokens.pine : entry.confidence_rating >= 40 ? '#56826E' : tokens.ember)
+
   let formattedDate = entry.entry_date
   try {
     const d = new Date(entry.entry_date)
@@ -99,26 +104,35 @@ const TimelineItem = memo(function TimelineItem({
 
   return (
     <div id={`entry-${entry.id}`} className="tl-entry flex gap-4" style={{ position: "relative" }}>
-      {/* Dot Indicator */}
-      <div style={{ 
-        width: 12, 
-        height: 12, 
-        borderRadius: "50%", 
-        background: isSelected ? tokens.ember : (isPublic ? tokens.pine : tokens.card), 
-        border: `2px solid ${isSelected ? tokens.ember : (isPublic ? tokens.pine : tokens.plum)}`, 
-        flexShrink: 0, 
-        marginTop: 6 
-      }} />
+      {/* Illuminated Thread Node */}
+      <div 
+        style={{ 
+          width: 12, 
+          height: 12, 
+          borderRadius: "50%", 
+          background: isSelected ? tokens.ember : (isPublic ? nodeColor : tokens.card), 
+          border: `2.5px solid ${isSelected ? tokens.ember : nodeColor}`, 
+          boxShadow: isLatest 
+            ? `0 0 0 3px ${nodeColor}33, 0 0 8px ${nodeColor}44` 
+            : (isSelected ? `0 0 0 3px ${tokens.ember}33` : "none"),
+          flexShrink: 0, 
+          marginTop: 6,
+          transition: "all 0.25s ease"
+        }} 
+        title={`${entry.confidence_rating}% conviction`}
+      />
       
       {/* Card */}
       <div 
+        className="tl-card tl-card-interactive"
         style={{ 
           flex: 1, 
           background: tokens.card, 
           border: isSelected ? `2px solid ${tokens.ember}` : `1px solid ${tokens.line}`, 
-          borderRadius: 10, 
-          padding: "14px 16px",
-          transition: "all 0.2s ease" 
+          borderRadius: 12, 
+          padding: "16px 18px",
+          boxShadow: isSelected ? "var(--shadow-hover)" : "var(--shadow-card)",
+          transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)" 
         }}
       >
         <div className="flex items-center justify-between flex-wrap gap-2" style={{ marginBottom: 8 }}>

@@ -183,9 +183,67 @@ export default function Landing() {
             <br />
             Say it again when you don't anymore.
           </p>
-          <p style={{ fontSize: 14.5, opacity: 0.85, maxWidth: 380, lineHeight: 1.6 }}>
+          <p style={{ fontSize: 14.5, opacity: 0.85, maxWidth: 380, lineHeight: 1.6, marginBottom: 20 }}>
             Write about the same topic as many times as you need to. Plot your certainty over time. Keep it private, or put it out into the open — one entry at a time.
           </p>
+
+          {/* Tactile Throughline Evolution Preview */}
+          <div 
+            style={{ 
+              background: "rgba(255, 255, 255, 0.07)", 
+              backdropFilter: "blur(8px)",
+              borderRadius: 14, 
+              border: "1px solid rgba(241, 238, 228, 0.16)", 
+              padding: "18px 20px",
+              maxWidth: 380,
+              boxShadow: "0 8px 24px rgba(0, 0, 0, 0.15)"
+            }}
+          >
+            <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
+              <span className="tl-mono" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", opacity: 0.8 }}>
+                Sample Throughline
+              </span>
+              <span className="tl-mono" style={{ fontSize: 11, opacity: 0.7 }}>
+                3 logs recorded
+              </span>
+            </div>
+
+            <p className="tl-display" style={{ fontSize: 15, fontWeight: 600, margin: "0 0 12px 0", color: tokens.paper }}>
+              "Will AI agents replace junior developers?"
+            </p>
+
+            {/* SVG Smooth Curve */}
+            <div style={{ position: "relative", width: "100%", height: 56, marginBottom: 10 }}>
+              <svg viewBox="0 0 300 56" style={{ width: "100%", height: "100%", overflow: "visible" }} preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="heroGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#F1EEE4" stopOpacity="0.25" />
+                    <stop offset="100%" stopColor="#F1EEE4" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
+                <path
+                  d="M 15 38 C 65 38, 105 12, 150 14 C 195 16, 235 44, 285 20 L 285 52 L 15 52 Z"
+                  fill="url(#heroGradient)"
+                />
+                <path
+                  d="M 15 38 C 65 38, 105 12, 150 14 C 195 16, 235 44, 285 20"
+                  fill="none"
+                  stroke="#F1EEE4"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                />
+                <circle cx="15" cy="38" r="4" fill="#2F4A3D" stroke="#F1EEE4" strokeWidth="2" />
+                <circle cx="150" cy="14" r="4" fill="#2F4A3D" stroke="#F1EEE4" strokeWidth="2" />
+                <circle cx="285" cy="20" r="5" fill="#C46238" stroke="#F1EEE4" strokeWidth="2" />
+              </svg>
+            </div>
+
+            <div className="tl-mono flex justify-between" style={{ fontSize: 11, opacity: 0.85 }}>
+              <span>May: 40%</span>
+              <span>Nov: 85%</span>
+              <span style={{ color: tokens.emberSoft, fontWeight: 600 }}>Today: 70%</span>
+            </div>
+          </div>
         </div>
         <div className="flex flex-col gap-2">
           <p className="tl-mono" style={{ fontSize: 11, opacity: 0.6 }}>Private by default. Public when you say so.</p>
