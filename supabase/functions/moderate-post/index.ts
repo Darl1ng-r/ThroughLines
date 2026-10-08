@@ -111,7 +111,8 @@ async function evaluateWithAI(content: string, apiKey?: string): Promise<{ flagg
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ input: content })
+      body: JSON.stringify({ input: content }),
+      signal: AbortSignal.timeout(5000)
     })
 
     if (!response.ok) {

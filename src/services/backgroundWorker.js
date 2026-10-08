@@ -35,10 +35,12 @@ async function handleEntryCreatedWorker(eventMessage) {
     // Re-calculate AI perspective synthesis in background
     const synthesisResult = generatePerspectiveSynthesis(topicTitle || 'Topic', entries)
     // Cache or log background synthesis completion
-    console.log(`[Background Worker] AI Synthesis computed for topic [${topicId}]:`, {
-      stabilityScore: synthesisResult.stabilityScore,
-      pivotsCount: synthesisResult.pivots?.length || 0
-    })
+    if (import.meta.env.DEV) {
+      console.log(`[Background Worker] AI Synthesis computed for topic [${topicId}]:`, {
+        stabilityScore: synthesisResult.stabilityScore,
+        pivotsCount: synthesisResult.pivots?.length || 0
+      })
+    }
   } catch (err) {
     console.error(`[Background Worker] Error computing AI synthesis for topic [${topicId}]:`, err)
   }
@@ -55,7 +57,9 @@ export async function handlePublicPostWorker(eventMessage) {
   try {
     // Invalidate Discover feed cache so new public post reflects immediately
     await invalidateCache('discover_feed_cursor_null')
-    console.log(`[Background Worker] Cache invalidated for public post [${postId}]`)
+    if (import.meta.env.DEV) {
+      console.log(`[Background Worker] Cache invalidated for public post [${postId}]`)
+    }
   } catch (err) {
     console.error(`[Background Worker] Cache invalidation error for post [${postId}]:`, err)
   }
@@ -75,7 +79,9 @@ export async function handleNudgeWorker(eventMessage) {
       body: `${sender} requested an update on your throughline!`,
       url: '/dashboard'
     })
-    console.log(`[Background Worker] Notification dispatched for topic [${topicId}] from user [${nudgerUsername || 'anonymous'}]`)
+    if (import.meta.env.DEV) {
+      console.log(`[Background Worker] Notification dispatched for topic [${topicId}] from user [${nudgerUsername || 'anonymous'}]`)
+    }
   } catch (err) {
     console.error(`[Background Worker] Notification queue error for topic [${topicId}]:`, err)
   }

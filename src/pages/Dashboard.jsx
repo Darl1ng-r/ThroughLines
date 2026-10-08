@@ -270,6 +270,7 @@ export default function Dashboard() {
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
+        .limit(100)
 
       if (error) throw error
 
@@ -286,6 +287,8 @@ export default function Dashboard() {
             avatar_url
           )
         `)
+        .order('created_at', { ascending: false })
+        .limit(50)
 
       if (!nudgesErr) {
         setNudges(nudgesData || [])

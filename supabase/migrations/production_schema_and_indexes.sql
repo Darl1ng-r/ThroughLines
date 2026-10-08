@@ -325,6 +325,12 @@ CREATE INDEX IF NOT EXISTS idx_public_posts_feed          ON public.public_posts
 CREATE INDEX IF NOT EXISTS idx_public_posts_topic_mod      ON public.public_posts (topic_id, moderation_status);
 CREATE INDEX IF NOT EXISTS idx_nudges_topic_id            ON public.nudges (topic_id);
 CREATE INDEX IF NOT EXISTS idx_nudges_created_at          ON public.nudges (created_at);
+CREATE INDEX IF NOT EXISTS idx_public_posts_private_entry_id ON public.public_posts (private_entry_id);
+CREATE INDEX IF NOT EXISTS idx_public_posts_user_id        ON public.public_posts (user_id);
+CREATE INDEX IF NOT EXISTS idx_private_entries_user_id    ON public.private_entries (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_entry_revisions_entry_id   ON public.entry_revisions (entry_id, revised_at DESC);
+CREATE INDEX IF NOT EXISTS idx_entry_revisions_revised_by  ON public.entry_revisions (revised_by);
+CREATE INDEX IF NOT EXISTS idx_outbox_events_status        ON public.outbox_events (status, created_at) WHERE status = 'pending';
 
 -- Full-Text Search Generated Columns & GIN Indexes
 DO $$

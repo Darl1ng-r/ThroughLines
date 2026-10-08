@@ -9,18 +9,35 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Check active sessions
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setUser(session.user)
-        fetchProfile(session.user.id)
-      } else {
+    let isMounted = true
+
+    // Hard 3.5s timeout: prevent Supabase latency or cold-starts from permanently freezing the app
+    const timeoutId = setTimeout(() => {
+      if (isMounted) {
         setLoading(false)
       }
-    })
+    }, 3500)
+
+    // Check active sessions
+    supabase.auth.getSession()
+      .then(({ data }) => {
+        if (!isMounted) return
+        const session = data?.session
+        if (session) {
+          setUser(session.user)
+          fetchProfile(session.user.id)
+        } else {
+          setLoading(false)
+        }
+      })
+      .catch((err) => {
+        console.error('Auth session fetch failed:', err)
+        if (isMounted) setLoading(false)
+      })
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!isMounted) return
       if (session) {
         setUser(session.user)
         await fetchProfile(session.user.id)
@@ -31,7 +48,11 @@ export function AuthProvider({ children }) {
       }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      isMounted = false
+      clearTimeout(timeoutId)
+      subscription?.unsubscribe?.()
+    }
   }, [])
 
   async function fetchProfile(userId) {

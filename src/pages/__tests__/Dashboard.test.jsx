@@ -14,6 +14,7 @@ function createQueryBuilder(resolvedData) {
     select: vi.fn(() => builder),
     eq: vi.fn(() => builder),
     order: vi.fn(() => builder),
+    limit: vi.fn(() => builder),
     range: vi.fn(() => builder),
     maybeSingle: vi.fn().mockResolvedValue({ data: resolvedData, error: null }),
     then: (resolve) => Promise.resolve({ data: resolvedData, error: null }).then(resolve)

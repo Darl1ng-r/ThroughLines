@@ -6,17 +6,19 @@ const UPSTASH_TOKEN = Deno.env.get('UPSTASH_REDIS_REST_TOKEN')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')
 
-// Lock CORS to your production domain — set APP_ORIGIN in Supabase Edge Function secrets
-// e.g., APP_ORIGIN=https://yourdomain.com
-const APP_ORIGIN = Deno.env.get('APP_ORIGIN') || ''
-const ALLOWED_ORIGINS = APP_ORIGIN
-  ? [APP_ORIGIN, `https://www.${APP_ORIGIN.replace(/^https?:\/\//, '')}`]
-  : ['http://localhost:3000', 'http://localhost:5173']
+// Lock CORS to configured domains — set APP_ORIGIN in Supabase Edge Function secrets
+// Supports single origin or comma-separated list, e.g. APP_ORIGIN=https://throughline.app,https://www.throughline.app
+const rawOrigin = Deno.env.get('APP_ORIGIN') || ''
+const envOrigins = rawOrigin.split(',').map(s => s.trim()).filter(Boolean)
+const ALLOWED_ORIGINS = envOrigins.length > 0
+  ? envOrigins
+  : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:4173']
 
 function getCorsHeaders(origin: string) {
-  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
+  const isAllowed = ALLOWED_ORIGINS.some(allowed => allowed === origin || allowed === '*')
+  const allowedHeader = isAllowed ? origin : ALLOWED_ORIGINS[0]
   return {
-    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Origin': allowedHeader,
     'Vary': 'Origin',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   }
@@ -102,7 +104,8 @@ serve(async (req) => {
       method: reqMethod,
       headers: {
         Authorization: `Bearer ${UPSTASH_TOKEN}`
-      }
+      },
+      signal: AbortSignal.timeout(4000)
     })
 
     const data = await upstreamRes.json()

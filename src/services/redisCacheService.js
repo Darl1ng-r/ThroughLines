@@ -82,7 +82,8 @@ export async function getCache(key) {
       const res = await fetch(`${PROXY_CACHE_URL}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ action: 'get', key })
+        body: JSON.stringify({ action: 'get', key }),
+        signal: AbortSignal.timeout(2500)
       })
       if (res.ok) {
         const data = await res.json()
@@ -126,7 +127,8 @@ export async function setCache(key, value, ttlSeconds = 60) {
       await fetch(`${PROXY_CACHE_URL}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ action: 'set', key, value, ttl: ttlSeconds })
+        body: JSON.stringify({ action: 'set', key, value, ttl: ttlSeconds }),
+        signal: AbortSignal.timeout(2500)
       })
     } catch (_) {
       // Memory fallback is already set
@@ -148,7 +150,8 @@ export async function invalidateCache(key) {
       await fetch(`${PROXY_CACHE_URL}`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ action: 'del', key })
+        body: JSON.stringify({ action: 'del', key }),
+        signal: AbortSignal.timeout(2500)
       })
     } catch (_) {}
   }
