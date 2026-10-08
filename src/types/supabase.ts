@@ -104,7 +104,9 @@ export interface Database {
           user_id: string
           content: string
           confidence_rating: number
-          moderation_status: 'pending' | 'approved' | 'flagged'
+          moderation_status: 'pending' | 'approved' | 'flagged' | 'rejected'
+          moderation_reason?: string | null
+          moderated_at?: string | null
           entry_date: string
           fts?: any
           created_at?: string
@@ -116,7 +118,9 @@ export interface Database {
           user_id: string
           content: string
           confidence_rating: number
-          moderation_status?: 'pending' | 'approved' | 'flagged'
+          moderation_status?: 'pending' | 'approved' | 'flagged' | 'rejected'
+          moderation_reason?: string | null
+          moderated_at?: string | null
           entry_date?: string
           fts?: any
           created_at?: string
@@ -128,7 +132,9 @@ export interface Database {
           user_id?: string
           content?: string
           confidence_rating?: number
-          moderation_status?: 'pending' | 'approved' | 'flagged'
+          moderation_status?: 'pending' | 'approved' | 'flagged' | 'rejected'
+          moderation_reason?: string | null
+          moderated_at?: string | null
           entry_date?: string
           fts?: any
           created_at?: string

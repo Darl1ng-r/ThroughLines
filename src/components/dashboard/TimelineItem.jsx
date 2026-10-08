@@ -52,6 +52,13 @@ function VisibilityStatus({ visibility, status }) {
       </span>
     )
   }
+  if (status === 'rejected') {
+    return (
+      <span className="tl-mono flex items-center gap-1" style={{ fontSize: 11, letterSpacing: "0.04em", color: tokens.danger, textTransform: "uppercase" }}>
+        <AlertCircle size={11} /> Rejected
+      </span>
+    )
+  }
   return (
     <span className="tl-mono flex items-center gap-1" style={{ fontSize: 11, letterSpacing: "0.04em", color: tokens.pine, textTransform: "uppercase" }}>
       <Globe size={11} /> Public
@@ -75,6 +82,7 @@ const TimelineItem = memo(function TimelineItem({
   const [editContent, setEditContent] = useState(entry.content)
   const [editConfidence, setEditConfidence] = useState(entry.confidence_rating)
   const [saving, setSaving] = useState(false)
+  const [editError, setEditError] = useState(null)
 
   const nodeColor = isSelected 
     ? tokens.ember 
@@ -91,11 +99,12 @@ const TimelineItem = memo(function TimelineItem({
   async function handleSaveEdit() {
     const trimmed = editContent.trim()
     if (!trimmed || saving) return
+    setEditError(null)
 
     if (isPublic) {
       const contentMod = moderateContent(trimmed)
       if (!contentMod.isValid) {
-        alert(`Cannot save public entry: ${contentMod.reason}`)
+        setEditError(contentMod.reason)
         return
       }
     }
@@ -108,6 +117,7 @@ const TimelineItem = memo(function TimelineItem({
       setIsEditing(false)
     } catch (err) {
       console.error('Save edit error:', err)
+      setEditError('Failed to save edit.')
     } finally {
       setSaving(false)
     }
@@ -187,6 +197,22 @@ const TimelineItem = memo(function TimelineItem({
                 resize: "vertical"
               }}
             />
+
+            {editError && (
+              <div 
+                style={{
+                  fontSize: 12,
+                  color: "var(--color-danger, #8C4A3A)",
+                  background: "rgba(140, 74, 58, 0.08)",
+                  padding: "6px 10px",
+                  borderRadius: 6,
+                  border: "1px solid rgba(140, 74, 58, 0.28)",
+                  lineHeight: 1.4
+                }}
+              >
+                <strong>Community Notice:</strong> {editError}
+              </div>
+            )}
 
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">

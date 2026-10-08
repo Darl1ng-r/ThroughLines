@@ -62,7 +62,9 @@ CREATE TABLE IF NOT EXISTS public.public_posts (
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
     content TEXT NOT NULL CHECK (char_length(content) <= 5000),
     confidence_rating INT NOT NULL CHECK (confidence_rating >= 0 AND confidence_rating <= 100),
-    moderation_status TEXT NOT NULL DEFAULT 'pending' CHECK (moderation_status IN ('pending', 'approved', 'flagged')),
+    moderation_status TEXT NOT NULL DEFAULT 'pending' CHECK (moderation_status IN ('pending', 'approved', 'flagged', 'rejected')),
+    moderation_reason TEXT DEFAULT NULL,
+    moderated_at TIMESTAMPTZ DEFAULT NOW(),
     entry_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -77,10 +79,37 @@ CREATE TABLE IF NOT EXISTS public.nudges (
 );
 
 -- ---------------------------------------------------------------------------
--- 6. Server-Side Content Moderation Trigger
--- Runs BEFORE INSERT/UPDATE inside PostgreSQL — cannot be bypassed by any client.
--- Using a subquery on regexp_matches() for PG13+ compatibility (not REGEXP_COUNT).
--- Hardened with explicit search_path and restricted EXECUTE permissions.
+-- 6. In-Database Text Normalization Engine
+-- Strips invisible characters, accents, homoglyphs, and leetspeak in PostgreSQL
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.normalize_text_moderation(input_text TEXT)
+RETURNS TEXT
+LANGUAGE plpgsql
+IMMUTABLE
+AS $$
+DECLARE
+    cleaned TEXT;
+BEGIN
+    IF input_text IS NULL THEN
+        RETURN '';
+    END IF;
+    cleaned := LOWER(input_text);
+    -- Strip zero-width & invisible characters
+    cleaned := REGEXP_REPLACE(cleaned, '[\x{200B}\x{200C}\x{200D}\x{FEFF}\x{00AD}\x{2060}]', '', 'g');
+    -- Transliterate Cyrillic visual lookalikes to Latin equivalents
+    cleaned := TRANSLATE(cleaned, 'асеорхуіѕпв', 'aceorxyisnb');
+    -- Transliterate common accented vowels
+    cleaned := TRANSLATE(cleaned, 'áàâäãéèêëíìîïóòôöõúùûüýÿ', 'aaaaaeeeeiiiiooooouuuuyy');
+    -- Transliterate common leetspeak symbols to letters
+    cleaned := TRANSLATE(cleaned, '@$01357+', 'asoieftt');
+    RETURN cleaned;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 7. Server-Side Content Moderation Trigger on public_posts
+-- Runs BEFORE INSERT OR UPDATE ON public.public_posts
+-- Defends against direct manipulation of moderation_status and post-edit tampering
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.moderate_public_post()
 RETURNS TRIGGER
@@ -90,38 +119,139 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
     http_count INT := 0;
-    is_spam    BOOLEAN;
+    norm_content TEXT;
+    is_toxic BOOLEAN;
+    is_service_role BOOLEAN;
 BEGIN
-    -- Count HTTP/HTTPS link occurrences (PG13+ compatible — regexp_matches in 'g' mode)
+    is_service_role := (current_setting('request.jwt.claims', true)::jsonb->>'role' = 'service_role')
+                       OR (CURRENT_USER = 'postgres')
+                       OR (session_user = 'postgres');
+
+    -- ANTI-TAMPERING: Block non-service-role clients from setting or tampering with moderation_status
+    IF TG_OP = 'UPDATE' THEN
+        IF NOT is_service_role AND OLD.moderation_status IS DISTINCT FROM NEW.moderation_status THEN
+            NEW.moderation_status := OLD.moderation_status;
+        END IF;
+    END IF;
+
+    norm_content := public.normalize_text_moderation(NEW.content);
+
     SELECT COUNT(*) INTO http_count
     FROM regexp_matches(NEW.content, 'https?://', 'g');
 
-    is_spam := (CHAR_LENGTH(NEW.content) > 5000)
-            OR (http_count > 3)
-            OR (NEW.content ~* '\m(casino|crypto-?airdrop|free-?followers|phishing|whatsapp investment|telegram signals)\M')
-            OR (NEW.content ~* '\m(f+u+c+k+[a-z]*|b+i+t+c+h+e?s?|b+a+s+t+a+r+d+s?|c+u+n+t+s?|a+s+s+h+o+l+e+s?|p+u+s+s+y|d+i+c+k+h+e+a+d+)\M')
-            OR (NEW.content ~* '\m(n+i+g+g+[ea]+r+|n+i+g+g+a+|k+i+k+e+|ch+i+n+k+|f+a+g+g+o+t+|f+a+g+s?|d+y+k+e+s?|t+r+a+n+n+y|r+e+t+a+r+d+[es]?)\M')
-            OR (NEW.content ~* '(kill\s+(your|ur)self|commit\s+suicide|i\s+will\s+(kill|murder|shoot|stab)\s+(you|u)|slit\s+(your|ur)?\s*throat)');
+    is_toxic := (CHAR_LENGTH(NEW.content) > 5000)
+             OR (http_count > 3)
+             OR (norm_content ~* '\m(casino|crypto-?airdrop|free-?followers|phishing|whatsapp investment|telegram signals)\M')
+             OR (norm_content ~* '\m(f+u+c+k+[a-z]*|f+\*+c+k+|b+i+t+c+h+e?s?|b+\*+t+c+h+|b+a+s+t+a+r+d+s?|c+u+n+t+s?|c+\*+n+t+|a+s+s+h+o+l+e+s?|p+u+s+s+y|d+i+c+k+h+e+a+d+|p+o+r+n+[a-z]*|b+l+o+w+j+o+b+|s+h+i+t+[a-z]*)\M')
+             OR (norm_content ~* '\m(n+i+g+g+[ea]+r+|n+i+g+g+a+|k+i+k+e+|ch+i+n+k+|f+a+g+g+o+t+|f+a+g+s?|d+y+k+e+s?|t+r+a+n+n+y|r+e+t+a+r+d+[es]?)\M')
+             OR (norm_content ~* '(kill\s+(your|ur)self|commit\s+suicide|go\s+die|i\s+will\s+(kill|murder|shoot|stab)\s+(you|u)|slit\s+(your|ur)?\s*throat)');
 
-    IF is_spam THEN
+    IF is_toxic THEN
         NEW.moderation_status := 'flagged';
-    ELSIF NEW.moderation_status IS NULL OR NEW.moderation_status = 'pending' THEN
-        NEW.moderation_status := 'approved';
+        NEW.moderation_reason := 'Automated database rule match';
+        NEW.moderated_at := NOW();
+    ELSE
+        IF TG_OP = 'INSERT' THEN
+            IF NOT is_service_role OR NEW.moderation_status IS NULL THEN
+                NEW.moderation_status := 'approved';
+                NEW.moderated_at := NOW();
+            END IF;
+        ELSIF TG_OP = 'UPDATE' AND OLD.content IS DISTINCT FROM NEW.content THEN
+            NEW.moderation_status := 'approved';
+            NEW.moderated_at := NOW();
+        END IF;
     END IF;
 
     RETURN NEW;
 END;
 $$;
 
--- Trigger functions must NOT be callable via PostgREST RPC (/rest/v1/rpc/...)
 REVOKE EXECUTE ON FUNCTION public.moderate_public_post() FROM PUBLIC, anon, authenticated;
 
--- Idempotent trigger: DROP IF EXISTS first, then CREATE
 DROP TRIGGER IF EXISTS trigger_moderate_public_post ON public.public_posts;
 CREATE TRIGGER trigger_moderate_public_post
-    BEFORE INSERT OR UPDATE OF content ON public.public_posts
+    BEFORE INSERT OR UPDATE ON public.public_posts
     FOR EACH ROW
     EXECUTE FUNCTION public.moderate_public_post();
+
+-- ---------------------------------------------------------------------------
+-- 8. Server-Side Moderation Trigger on public.topics (Title & Slug)
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.moderate_topic_metadata()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    norm_title TEXT;
+    norm_slug  TEXT;
+    is_toxic   BOOLEAN;
+BEGIN
+    norm_title := public.normalize_text_moderation(NEW.title);
+    norm_slug  := public.normalize_text_moderation(NEW.slug);
+
+    is_toxic := (norm_title ~* '\m(casino|crypto-?airdrop|free-?followers|phishing)\M')
+             OR (norm_title ~* '\m(f+u+c+k+[a-z]*|b+i+t+c+h+e?s?|c+u+n+t+s?|a+s+s+h+o+l+e+s?|p+u+s+s+y|d+i+c+k+h+e+a+d+|p+o+r+n+[a-z]*)\M')
+             OR (norm_title ~* '\m(n+i+g+g+[ea]+r+|n+i+g+g+a+|k+i+k+e+|ch+i+n+k+|f+a+g+g+o+t+|f+a+g+s?|d+y+k+e+s?|t+r+a+n+n+y|r+e+t+a+r+d+[es]?)\M')
+             OR (norm_title ~* '(kill\s+(your|ur)self|commit\s+suicide|i\s+will\s+(kill|murder)\s+(you|u))')
+             OR (norm_slug  ~* '(fuck|bitch|cunt|nigger|faggot|retard|kill-yourself)');
+
+    IF is_toxic THEN
+        RAISE EXCEPTION 'Topic title or slug violates community discourse guidelines.'
+            USING ERRCODE = '23514';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.moderate_topic_metadata() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS trigger_moderate_topics ON public.topics;
+CREATE TRIGGER trigger_moderate_topics
+    BEFORE INSERT OR UPDATE OF title, slug ON public.topics
+    FOR EACH ROW
+    EXECUTE FUNCTION public.moderate_topic_metadata();
+
+-- ---------------------------------------------------------------------------
+-- 9. Server-Side Moderation Trigger on public.profiles (Display Name & Bio)
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.moderate_profile_metadata()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+    norm_bio  TEXT;
+    norm_name TEXT;
+    is_toxic  BOOLEAN;
+BEGIN
+    norm_bio  := public.normalize_text_moderation(COALESCE(NEW.bio, ''));
+    norm_name := public.normalize_text_moderation(COALESCE(NEW.display_name, ''));
+
+    is_toxic := (norm_bio ~* '\m(casino|crypto-?airdrop|free-?followers|phishing)\M')
+             OR (norm_bio ~* '\m(f+u+c+k+[a-z]*|b+i+t+c+h+e?s?|c+u+n+t+s?|a+s+s+h+o+l+e+s?|p+o+r+n+[a-z]*)\M')
+             OR (norm_bio ~* '\m(n+i+g+g+[ea]+r+|n+i+g+g+a+|k+i+k+e+|ch+i+n+k+|f+a+g+g+o+t+|f+a+g+s?|d+y+k+e+s?|t+r+a+n+n+y|r+e+t+a+r+d+[es]?)\M')
+             OR (norm_name ~* '\m(n+i+g+g+[ea]+r+|n+i+g+g+a+|k+i+k+e+|ch+i+n+k+|f+a+g+g+o+t+|f+a+g+s?|c+u+n+t+s?)\M');
+
+    IF is_toxic THEN
+        RAISE EXCEPTION 'Profile display name or bio violates community discourse guidelines.'
+            USING ERRCODE = '23514';
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.moderate_profile_metadata() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS trigger_moderate_profiles ON public.profiles;
+CREATE TRIGGER trigger_moderate_profiles
+    BEFORE INSERT OR UPDATE OF display_name, bio ON public.profiles
+    FOR EACH ROW
+    EXECUTE FUNCTION public.moderate_profile_metadata();
 
 -- ---------------------------------------------------------------------------
 -- 7. Nudge TTL Cleanup Function (runs daily via pg_cron at 03:00 UTC)

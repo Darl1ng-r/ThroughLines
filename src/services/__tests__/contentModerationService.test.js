@@ -124,6 +124,53 @@ describe('contentModerationService', () => {
       expect(result.isValid).toBe(false)
       expect(result.isFlagged).toBe(true)
     })
+    it('flags Cyrillic and Greek homoglyph evasions', () => {
+      // \u0443 is Cyrillic 'у' visual lookalike for 'u'
+      const cyrillicBypass = 'f\u0443ck you'
+      const result = moderateContent(cyrillicBypass)
+      expect(result.isValid).toBe(false)
+      expect(result.isFlagged).toBe(true)
+    })
+
+    it('flags accented and diacritic obfuscation (e.g. fück, bîtch, shít)', () => {
+      const accented = [
+        'fück this',
+        'you bîtch',
+        'holy shít'
+      ]
+      accented.forEach((text) => {
+        const result = moderateContent(text)
+        expect(result.isValid).toBe(false)
+        expect(result.isFlagged).toBe(true)
+      })
+    })
+
+    it('flags wildcard asterisk masking (e.g. f*ck, b*tch, p*rn, sh*t)', () => {
+      const asteriskMasked = [
+        'what the f*ck',
+        'such a b*tch',
+        'watch free p*rn here',
+        'full of sh*t'
+      ]
+      asteriskMasked.forEach((text) => {
+        const result = moderateContent(text)
+        expect(result.isValid).toBe(false)
+        expect(result.isFlagged).toBe(true)
+      })
+    })
+
+    it('flags zero-width space evasion', () => {
+      const zeroWidth = 'f\u200Buck you'
+      const result = moderateContent(zeroWidth)
+      expect(result.isValid).toBe(false)
+      expect(result.isFlagged).toBe(true)
+    })
+
+    it('flags letter-spaced threat words (e.g. k i l l yourself)', () => {
+      const result = moderateContent('k i l l yourself')
+      expect(result.isValid).toBe(false)
+      expect(result.isFlagged).toBe(true)
+    })
   })
 
   describe('Spam, Scams & Structural Limits', () => {
@@ -166,6 +213,12 @@ describe('contentModerationService', () => {
     it('strips non-alphanumeric separators', () => {
       expect(stripSeparators('f.u.c.k')).toBe('fuck')
       expect(stripSeparators('b-i-t-c-h')).toBe('bitch')
+    })
+
+    it('normalizes diacritics and homoglyphs', () => {
+      expect(normalizeText('fück')).toBe('fuck')
+      expect(normalizeText('f\u0443ck')).toBe('fuck')
+      expect(normalizeText('f*ck')).toBe('fuck')
     })
   })
 })
