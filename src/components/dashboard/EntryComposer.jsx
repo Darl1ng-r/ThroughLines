@@ -109,14 +109,14 @@ const EntryComposer = memo(function EntryComposer({
             fontFamily: "inherit", 
             background: tokens.paper, 
             color: tokens.ink, 
-            marginBottom: 6,
+            marginBottom: 14,
             opacity: submitting ? 0.6 : 1 
           }}
         />
         
         {/* Confidence Slider */}
-        <div className="flex items-center gap-3" style={{ marginBottom: 12 }}>
-          <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkSoft, whiteSpace: "nowrap" }}>How sure?</span>
+        <div className="flex items-center gap-3" style={{ marginBottom: 16, paddingTop: 2 }}>
+          <span className="tl-mono" style={{ fontSize: 11.5, color: tokens.inkSoft, whiteSpace: "nowrap" }}>How sure?</span>
           <div style={{ flex: 1, position: "relative", display: "flex", alignItems: "center" }}>
             <input 
               type="range" 
@@ -152,9 +152,15 @@ const EntryComposer = memo(function EntryComposer({
 
         {/* Structured Shift Reason Scaffolding */}
         {setComposeShiftReason && (
-          <div style={{ marginBottom: 12 }}>
-            <div className="flex items-center justify-between" style={{ marginBottom: 6 }}>
-              <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkSoft }}>
+          <div 
+            style={{ 
+              marginBottom: 18,
+              paddingTop: 12,
+              borderTop: `1px solid ${tokens.line}`
+            }}
+          >
+            <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+              <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkSoft, letterSpacing: "0.01em" }}>
                 What influenced this conviction? <span style={{ opacity: 0.6 }}>(optional)</span>
               </span>
               {composeShiftReason && (
@@ -162,13 +168,13 @@ const EntryComposer = memo(function EntryComposer({
                   type="button"
                   onClick={() => setComposeShiftReason(null)}
                   className="tl-mono"
-                  style={{ background: "none", border: "none", fontSize: 10, color: tokens.inkFaint, cursor: "pointer", textDecoration: "underline" }}
+                  style={{ background: "none", border: "none", fontSize: 10.5, color: tokens.inkFaint, cursor: "pointer", textDecoration: "underline" }}
                 >
                   clear
                 </button>
               )}
             </div>
-            <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
               {[
                 { id: 'empirical_data', label: 'Empirical Data' },
                 { id: 'counter_argument', label: 'Counter-Argument' },
@@ -184,15 +190,17 @@ const EntryComposer = memo(function EntryComposer({
                     onClick={() => setComposeShiftReason(isActive ? null : reason.id)}
                     className="tl-focus btn-premium"
                     style={{
-                      padding: "3px 9px",
+                      padding: "5px 12px",
                       borderRadius: 999,
-                      fontSize: 11.5,
+                      fontSize: 12,
+                      lineHeight: "1.2",
                       border: isActive ? `1px solid ${tokens.pine}` : `1px solid ${tokens.line}`,
                       background: isActive ? tokens.pineSoft : tokens.paperDeep,
                       color: isActive ? tokens.pine : tokens.inkSoft,
                       fontWeight: isActive ? 600 : 400,
                       cursor: "pointer",
-                      transition: "all 0.15s ease"
+                      transition: "all 0.15s ease",
+                      boxShadow: isActive ? "0 1px 3px rgba(74, 107, 90, 0.15)" : "none"
                     }}
                   >
                     {reason.label}

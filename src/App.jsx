@@ -82,10 +82,6 @@ function NavBar({ onOpenCommandPalette, theme, toggleTheme }) {
     }
   }, [menuOpen])
 
-  function toggleTheme() {
-    setTheme(prev => prev === 'dark' ? 'light' : 'dark')
-  }
-
   // Don't show navigation on the Landing/Auth page
   if (location.pathname === '/') return null
 
