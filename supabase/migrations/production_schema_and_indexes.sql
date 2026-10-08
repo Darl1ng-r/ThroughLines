@@ -203,108 +203,144 @@ ALTER TABLE public.public_posts    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.nudges          ENABLE ROW LEVEL SECURITY;
 
 -- ---------------------------------------------------------------------------
--- RLS Policies
--- DROP POLICY IF EXISTS before every CREATE — makes the entire block idempotent.
+-- RLS Policies (Hardened against Supabase Advisor & Performance Linters)
+-- Uses (select auth.uid()) instead of auth.uid() to eliminate auth_rls_initplan warnings.
+-- Consolidates multiple permissive policies to eliminate multiple_permissive_policies warnings.
+-- Drops all insecure legacy policies like "Allow public insert to nudges".
 -- ---------------------------------------------------------------------------
 
--- Profiles
+-- 1. Profiles
 DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.profiles;
 DROP POLICY IF EXISTS "Users can insert their own profile"       ON public.profiles;
 DROP POLICY IF EXISTS "Users can update own profile"             ON public.profiles;
+DROP POLICY IF EXISTS "Allow users to update their own profile"   ON public.profiles;
+DROP POLICY IF EXISTS "Allow public read access to profiles"     ON public.profiles;
 
 CREATE POLICY "Public profiles are viewable by everyone" ON public.profiles
     FOR SELECT USING (true);
-CREATE POLICY "Users can insert their own profile" ON public.profiles
-    FOR INSERT WITH CHECK (auth.uid() = id);
-CREATE POLICY "Users can update own profile" ON public.profiles
-    FOR UPDATE USING (auth.uid() = id);
 
--- Topics
+CREATE POLICY "Users can insert their own profile" ON public.profiles
+    FOR INSERT WITH CHECK ((select auth.uid()) = id);
+
+CREATE POLICY "Users can update own profile" ON public.profiles
+    FOR UPDATE USING ((select auth.uid()) = id)
+    WITH CHECK ((select auth.uid()) = id);
+
+-- 2. Topics
 DROP POLICY IF EXISTS "Users can view own topics"                    ON public.topics;
 DROP POLICY IF EXISTS "Public topics viewable if has approved posts" ON public.topics;
 DROP POLICY IF EXISTS "Users can insert own topics"                  ON public.topics;
 DROP POLICY IF EXISTS "Users can update own topics"                  ON public.topics;
 DROP POLICY IF EXISTS "Users can delete own topics"                  ON public.topics;
+DROP POLICY IF EXISTS "Allow authenticated users to insert topics"   ON public.topics;
+DROP POLICY IF EXISTS "Allow owners to update/delete their topics"   ON public.topics;
+DROP POLICY IF EXISTS "Allow public read access to topics"           ON public.topics;
+DROP POLICY IF EXISTS "Topics viewable by owner or if public"        ON public.topics;
 
-CREATE POLICY "Users can view own topics" ON public.topics
-    FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Public topics viewable if has approved posts" ON public.topics
+-- Consolidated single SELECT policy (avoids multiple permissive policies warning)
+CREATE POLICY "Topics viewable by owner or if public" ON public.topics
     FOR SELECT USING (
-        EXISTS (
+        (select auth.uid()) = user_id
+        OR EXISTS (
             SELECT 1 FROM public.public_posts
             WHERE public_posts.topic_id = topics.id AND moderation_status = 'approved'
         )
     );
-CREATE POLICY "Users can insert own topics" ON public.topics
-    FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own topics" ON public.topics
-    FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can delete own topics" ON public.topics
-    FOR DELETE USING (auth.uid() = user_id);
 
--- Private Entries
-DROP POLICY IF EXISTS "Users can view own private entries"   ON public.private_entries;
-DROP POLICY IF EXISTS "Users can insert own private entries" ON public.private_entries;
-DROP POLICY IF EXISTS "Users can update own private entries" ON public.private_entries;
-DROP POLICY IF EXISTS "Users can delete own private entries" ON public.private_entries;
+CREATE POLICY "Users can insert own topics" ON public.topics
+    FOR INSERT WITH CHECK ((select auth.uid()) = user_id);
+
+CREATE POLICY "Users can update own topics" ON public.topics
+    FOR UPDATE USING ((select auth.uid()) = user_id)
+    WITH CHECK ((select auth.uid()) = user_id);
+
+CREATE POLICY "Users can delete own topics" ON public.topics
+    FOR DELETE USING ((select auth.uid()) = user_id);
+
+-- 3. Private Entries
+DROP POLICY IF EXISTS "Users can view own private entries"     ON public.private_entries;
+DROP POLICY IF EXISTS "Users can insert own private entries"   ON public.private_entries;
+DROP POLICY IF EXISTS "Users can update own private entries"   ON public.private_entries;
+DROP POLICY IF EXISTS "Users can delete own private entries"   ON public.private_entries;
+DROP POLICY IF EXISTS "Restrict private entries to owner only" ON public.private_entries;
 
 CREATE POLICY "Users can view own private entries" ON public.private_entries
-    FOR SELECT USING (auth.uid() = user_id);
+    FOR SELECT USING ((select auth.uid()) = user_id);
+
 CREATE POLICY "Users can insert own private entries" ON public.private_entries
-    FOR INSERT WITH CHECK (auth.uid() = user_id);
+    FOR INSERT WITH CHECK ((select auth.uid()) = user_id);
+
 CREATE POLICY "Users can update own private entries" ON public.private_entries
-    FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+    FOR UPDATE USING ((select auth.uid()) = user_id)
+    WITH CHECK ((select auth.uid()) = user_id);
+
 CREATE POLICY "Users can delete own private entries" ON public.private_entries
-    FOR DELETE USING (auth.uid() = user_id);
+    FOR DELETE USING ((select auth.uid()) = user_id);
 
--- Public Posts
-DROP POLICY IF EXISTS "Approved public posts are viewable by everyone" ON public.public_posts;
-DROP POLICY IF EXISTS "Users can insert own public posts"              ON public.public_posts;
-DROP POLICY IF EXISTS "Users can update own public posts"              ON public.public_posts;
-DROP POLICY IF EXISTS "Users can delete own public posts"              ON public.public_posts;
+-- 4. Public Posts
+DROP POLICY IF EXISTS "Approved public posts are viewable by everyone"        ON public.public_posts;
+DROP POLICY IF EXISTS "Users can insert own public posts"                     ON public.public_posts;
+DROP POLICY IF EXISTS "Users can update own public posts"                     ON public.public_posts;
+DROP POLICY IF EXISTS "Users can delete own public posts"                     ON public.public_posts;
+DROP POLICY IF EXISTS "Allow owners to read their own pending/flagged posts"  ON public.public_posts;
+DROP POLICY IF EXISTS "Allow public read access to approved posts"            ON public.public_posts;
+DROP POLICY IF EXISTS "Allow owners to insert public posts"                   ON public.public_posts;
+DROP POLICY IF EXISTS "Allow owners to delete public posts"                   ON public.public_posts;
+DROP POLICY IF EXISTS "Public posts viewable if approved or by owner"         ON public.public_posts;
 
-CREATE POLICY "Approved public posts are viewable by everyone" ON public.public_posts
-    FOR SELECT USING (moderation_status = 'approved' OR auth.uid() = user_id);
+-- Consolidated single SELECT policy (avoids multiple permissive policies warning)
+CREATE POLICY "Public posts viewable if approved or by owner" ON public.public_posts
+    FOR SELECT USING (
+        moderation_status = 'approved'
+        OR (select auth.uid()) = user_id
+    );
+
 CREATE POLICY "Users can insert own public posts" ON public.public_posts
-    FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can update own public posts" ON public.public_posts
-    FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "Users can delete own public posts" ON public.public_posts
-    FOR DELETE USING (auth.uid() = user_id);
+    FOR INSERT WITH CHECK ((select auth.uid()) = user_id);
 
--- Nudges (Multi-tenant secured and visible to both topic owners and nudgers)
--- Clean up legacy insecure/permissive policies
+CREATE POLICY "Users can update own public posts" ON public.public_posts
+    FOR UPDATE USING ((select auth.uid()) = user_id)
+    WITH CHECK ((select auth.uid()) = user_id);
+
+CREATE POLICY "Users can delete own public posts" ON public.public_posts
+    FOR DELETE USING ((select auth.uid()) = user_id);
+
+-- 5. Nudges (Multi-tenant secured and visible to both topic owners and nudgers)
 DROP POLICY IF EXISTS "Allow public insert to nudges"                       ON public.nudges;
 DROP POLICY IF EXISTS "Allow authenticated insert to nudges"                ON public.nudges;
 DROP POLICY IF EXISTS "Topic owners can view nudges"                        ON public.nudges;
+DROP POLICY IF EXISTS "Allow topic owners to view nudges"                   ON public.nudges;
+DROP POLICY IF EXISTS "Topic owners can delete nudges"                      ON public.nudges;
+DROP POLICY IF EXISTS "Allow topic owners to delete nudges"                 ON public.nudges;
 DROP POLICY IF EXISTS "Users can view relevant nudges"                      ON public.nudges;
 DROP POLICY IF EXISTS "Authenticated users can nudge topics of others once" ON public.nudges;
-DROP POLICY IF EXISTS "Topic owners can delete nudges"                      ON public.nudges;
 
 CREATE POLICY "Users can view relevant nudges" ON public.nudges
     FOR SELECT USING (
-        nudger_id = auth.uid()
+        nudger_id = (select auth.uid())
         OR EXISTS (
             SELECT 1 FROM public.topics
-            WHERE topics.id = nudges.topic_id AND topics.user_id = auth.uid()
+            WHERE topics.id = nudges.topic_id AND topics.user_id = (select auth.uid())
         )
     );
+
 CREATE POLICY "Authenticated users can nudge topics of others once" ON public.nudges
     FOR INSERT WITH CHECK (
-        auth.uid() IS NOT NULL
-        AND nudger_id = auth.uid()
+        (select auth.uid()) IS NOT NULL
+        AND nudger_id = (select auth.uid())
         AND EXISTS (
             SELECT 1 FROM public.topics
             WHERE topics.id = topic_id
-              AND topics.user_id != auth.uid()
+              AND topics.user_id != (select auth.uid())
               AND (topics.nudge_cooldown_until IS NULL OR topics.nudge_cooldown_until < NOW())
         )
     );
+
 CREATE POLICY "Topic owners can delete nudges" ON public.nudges
     FOR DELETE USING (
         EXISTS (
             SELECT 1 FROM public.topics
-            WHERE topics.id = nudges.topic_id AND topics.user_id = auth.uid()
+            WHERE topics.id = nudges.topic_id AND topics.user_id = (select auth.uid())
         )
     );
 
@@ -418,8 +454,19 @@ END $$;
 
 -- ---------------------------------------------------------------------------
 -- 10. Security Hardening for System/Legacy Helper Functions
--- Revoke RPC access on rls_auto_enable if present in public schema
+-- Revoke RPC access on internal trigger functions and remove rls_auto_enable
 -- ---------------------------------------------------------------------------
+REVOKE ALL ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.moderate_public_post() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.cleanup_old_nudges() FROM PUBLIC, anon, authenticated;
+
+DO $$
+BEGIN
+    DROP FUNCTION IF EXISTS public.rls_auto_enable() CASCADE;
+EXCEPTION
+    WHEN OTHERS THEN NULL;
+END $$;
+
 DO $$
 DECLARE
     func_record RECORD;
@@ -432,7 +479,7 @@ BEGIN
           AND p.proname IN ('rls_auto_enable')
     LOOP
         EXECUTE format('ALTER FUNCTION public.%I(%s) SET search_path = public, pg_temp;', func_record.proname, func_record.args);
-        EXECUTE format('REVOKE EXECUTE ON FUNCTION public.%I(%s) FROM PUBLIC, anon, authenticated;', func_record.proname, func_record.args);
+        EXECUTE format('REVOKE ALL ON FUNCTION public.%I(%s) FROM PUBLIC, anon, authenticated;', func_record.proname, func_record.args);
     END LOOP;
 END $$;
 
