@@ -1,0 +1,33 @@
+# ThroughLines Netlify Production Configuration
+[build]
+  publish = "dist"
+  command = "npm run build"
+
+# SPA Routing: all navigation routes fallback to index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Strict Security Headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains; preload"
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' https://accounts.google.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://lh3.googleusercontent.com https://*.supabase.co https://api.dicebear.com https://images.unsplash.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.upstash.io https://api.pwnedpasswords.com https://*.ingest.sentry.io https://*.sentry.io; frame-src 'self' https://accounts.google.com; worker-src 'self' blob:; frame-ancestors 'none';"
+
+# Static Fingerprinted Assets Long-Term Caching
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Service Worker Never Cache
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"

@@ -32,10 +32,12 @@ export default function MarkdownText({ content, className = "", style = {} }) {
   function sanitizeUrl(url) {
     if (!url || typeof url !== 'string') return '#'
     const trimmed = url.trim()
+    // Strictly block protocol-relative URLs (e.g. //evil.com or /\evil.com)
+    if (trimmed.startsWith('//') || trimmed.startsWith('/\\')) return '#'
     // Allow relative paths
     if (trimmed.startsWith('/') || trimmed.startsWith('#')) return trimmed
     try {
-      const parsed = new URL(trimmed, 'https://throughlines.app')
+      const parsed = new URL(trimmed)
       if (['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
         return trimmed
       }

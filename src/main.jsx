@@ -31,6 +31,15 @@ async function initSentry() {
       // Replay only on errors, not random sessions
       replaysSessionSampleRate: 0,
       replaysOnErrorSampleRate: 1.0,
+      beforeSend(event) {
+        if (event.request?.headers) {
+          delete event.request.headers['Authorization']
+          delete event.request.headers['authorization']
+          delete event.request.headers['cookie']
+          delete event.request.headers['Cookie']
+        }
+        return event
+      },
     })
   } catch (err) {
     console.warn('Sentry failed to initialize (non-blocking):', err)

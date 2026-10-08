@@ -42,18 +42,37 @@ export function logMetric(name, value) {
   metrics.set(name, current)
 }
 
+function sanitizeContext(ctx) {
+  if (!ctx || typeof ctx !== 'object') return ctx
+  const clean = {}
+  const SENSITIVE_KEYS = ['password', 'token', 'secret', 'authorization', 'cookie', 'apikey', 'key']
+  for (const [k, v] of Object.entries(ctx)) {
+    if (SENSITIVE_KEYS.some(sk => k.toLowerCase().includes(sk))) {
+      clean[k] = '[REDACTED]'
+    } else if (typeof v === 'string') {
+      clean[k] = v.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[REDACTED_EMAIL]')
+    } else if (typeof v === 'object' && v !== null) {
+      clean[k] = sanitizeContext(v)
+    } else {
+      clean[k] = v
+    }
+  }
+  return clean
+}
+
 /**
  * Record an unhandled error or exception
  * @param {Error|string} error 
  * @param {Object} context 
  */
 export function logError(error, context = {}) {
+  const sanitizedContext = sanitizeContext(context)
   const errorEvent = {
     id: `err_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     message: typeof error === 'string' ? error : error?.message || 'Unknown Error',
     stack: error?.stack || null,
     timestamp: new Date().toISOString(),
-    context
+    context: sanitizedContext
   }
 
   errorLogs.unshift(errorEvent)

@@ -36,4 +36,10 @@ describe('MarkdownText component', () => {
     expect(html).not.toContain('javascript:')
     expect(html).toContain('href="#"')
   })
+
+  it('blocks protocol-relative URLs that attempt open redirect phishing', () => {
+    const html = renderToStaticMarkup(<MarkdownText content="Visit [Phish](//evil.com/phish)" />)
+    expect(html).not.toContain('href="//evil.com/phish"')
+    expect(html).toContain('href="#"')
+  })
 })
