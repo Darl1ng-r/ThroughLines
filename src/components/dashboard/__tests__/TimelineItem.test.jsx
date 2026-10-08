@@ -122,7 +122,6 @@ describe('TimelineItem', () => {
     )
 
     expect(screen.getByText(/Empirical Data/i)).toBeDefined()
-    expect(screen.getByText(/📊/i)).toBeDefined()
   })
 
   it('toggles revision audit trail view', async () => {

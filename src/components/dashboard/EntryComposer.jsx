@@ -170,11 +170,11 @@ const EntryComposer = memo(function EntryComposer({
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
               {[
-                { id: 'empirical_evidence', label: '📊 Empirical Data' },
-                { id: 'counter_argument', label: '⚖️ Counter-Argument' },
-                { id: 'real_world_event', label: '🌍 Real-World Event' },
-                { id: 'value_shift', label: '💡 Value Shift' },
-                { id: 'introspective_review', label: '🔍 Introspection' }
+                { id: 'empirical_data', label: 'Empirical Data' },
+                { id: 'counter_argument', label: 'Counter-Argument' },
+                { id: 'real_world_event', label: 'Real-World Event' },
+                { id: 'value_shift', label: 'Value Shift' },
+                { id: 'introspection', label: 'Introspection' }
               ].map(reason => {
                 const isActive = composeShiftReason === reason.id
                 return (

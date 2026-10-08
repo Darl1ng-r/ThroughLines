@@ -19,11 +19,11 @@ const tokens = {
 }
 
 const SHIFT_REASONS = {
-  empirical_data: { label: 'Empirical Data', icon: '📊' },
-  counter_argument: { label: 'Counter-Argument', icon: '⚖️' },
-  real_world_event: { label: 'Real-World Event', icon: '🌍' },
-  value_shift: { label: 'Value Shift', icon: '💡' },
-  introspection: { label: 'Introspection', icon: '🔍' },
+  empirical_data: { label: 'Empirical Data' },
+  counter_argument: { label: 'Counter-Argument' },
+  real_world_event: { label: 'Real-World Event' },
+  value_shift: { label: 'Value Shift' },
+  introspection: { label: 'Introspection' },
 }
 
 function Meter({ value }) {
@@ -210,7 +210,7 @@ const TimelineItem = memo(function TimelineItem({
             <Meter value={isEditing ? editConfidence : entry.confidence_rating} />
             {shiftInfo && (
               <span 
-                className="tl-mono flex items-center gap-1"
+                className="tl-mono"
                 style={{
                   fontSize: 11,
                   padding: "1px 7px",
@@ -222,8 +222,7 @@ const TimelineItem = memo(function TimelineItem({
                 }}
                 title={`Attributed shift reason: ${shiftInfo.label}`}
               >
-                <span>{shiftInfo.icon}</span>
-                <span>{shiftInfo.label}</span>
+                {shiftInfo.label}
               </span>
             )}
           </div>
