@@ -25,6 +25,67 @@ const tokens = {
   ember: "var(--color-ember)",
 }
 
+// Topic domain & category classifier matching editorial taxonomy
+function getTopicCategory(topic) {
+  if (topic.category) {
+    return { name: topic.category, theme: 'sage' }
+  }
+  const title = (topic.title || '').toLowerCase()
+  const slug = (topic.slug || '').toLowerCase()
+  
+  if (title.includes('open weights') || title.includes('regulation') || title.includes('safety bill') || slug.includes('regulation') || slug.includes('oligopoly')) {
+    return { name: 'AI Policy', theme: 'sage' }
+  }
+  if (title.includes('compute') || title.includes('ubi') || title.includes('income') || title.includes('capital') || title.includes('economic') || title.includes('market')) {
+    return { name: 'Economics', theme: 'sand' }
+  }
+  if (title.includes('llm') || title.includes('consciousness') || title.includes('reasoning') || title.includes('ai agent') || title.includes('alignment')) {
+    return { name: 'AI & Mind', theme: 'sage' }
+  }
+  if (title.includes('battery') || title.includes('nuclear') || title.includes('energy') || title.includes('storage') || title.includes('grid')) {
+    return { name: 'Clean Energy', theme: 'sand' }
+  }
+  if (title.includes('async') || title.includes('office') || title.includes('coordination') || title.includes('culture') || title.includes('remote')) {
+    return { name: 'Work & Systems', theme: 'sage' }
+  }
+  if (title.includes('crispr') || title.includes('healthspan') || title.includes('epigenetic') || title.includes('biology') || title.includes('longevity')) {
+    return { name: 'Bio & Longevity', theme: 'sand' }
+  }
+  if (title.includes('offloading') || title.includes('cognitive') || title.includes('neuro') || title.includes('brain')) {
+    return { name: 'Cognitive Science', theme: 'lavender' }
+  }
+  if (title.includes('commons') || title.includes('resilience') || title.includes('ecology')) {
+    return { name: 'Ecology', theme: 'sage' }
+  }
+  return { name: 'Perspective', theme: 'sage' }
+}
+
+const AVATAR_PALETTES = [
+  { bg: "#D5E2D8", text: "#2A4235" }, // Sage (e.g. Zane Holloway)
+  { bg: "#EEDCD2", text: "#5A3B30" }, // Warm Peach / Terracotta (e.g. Elena Vance)
+  { bg: "#E2DEEE", text: "#383152" }, // Soft Lavender
+  { bg: "#EAE5D4", text: "#484025" }, // Soft Sand / Ochre
+  { bg: "#DEE7EE", text: "#2B3C4B" }, // Soft Slate
+  { bg: "#E8DED8", text: "#4E362C" }, // Warm Clay
+]
+
+function getAvatarStyle(username = '', displayName = '') {
+  const u = (username || '').toLowerCase()
+  if (u.includes('zane')) return AVATAR_PALETTES[0]
+  if (u.includes('socrates') || u.includes('elena')) return AVATAR_PALETTES[1]
+  if (u.includes('marcus')) return AVATAR_PALETTES[3]
+  if (u.includes('talia')) return AVATAR_PALETTES[4]
+  if (u.includes('maya')) return AVATAR_PALETTES[2]
+  
+  let hash = 0
+  const str = u || displayName || 'author'
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i)
+    hash |= 0
+  }
+  return AVATAR_PALETTES[Math.abs(hash) % AVATAR_PALETTES.length]
+}
+
 export default function Discover() {
   const navigate = useNavigate()
   const cachedInitial = getSyncCache('discover_feed_cursor_null')
@@ -203,6 +264,7 @@ export default function Discover() {
           const latestPost = sortedPosts[sortedPosts.length - 1]
           const latestConfidence = latestPost?.confidence_rating || 50
           const delta = Math.abs(latestConfidence - firstConfidence)
+          const diff = latestConfidence - firstConfidence
           
           // Time decay in days since latest post
           const lastDate = new Date(latestPost?.entry_date || new Date())
@@ -217,6 +279,7 @@ export default function Discover() {
             firstConfidence,
             latestConfidence,
             delta,
+            diff,
             daysAgo,
             span: `${sortedPosts.length} ${sortedPosts.length === 1 ? 'entry' : 'entries'}`
           }
@@ -394,38 +457,66 @@ export default function Discover() {
             </p>
           </div>
         ) : (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-6">
             {sortedFeed.map((topic) => {
               const isBookmarked = bookmarks.includes(topic.id)
+              const firstConf = topic.firstConfidence ?? topic.latestConfidence ?? 50
+              const latestConf = topic.latestConfidence ?? 50
+              const diff = topic.diff !== undefined ? topic.diff : (latestConf - firstConf)
+              const deltaAbs = Math.abs(diff)
+              const isDrop = diff < 0
+              const isRise = diff > 0
+              
+              // Sparkline & badge colors:
+              // Drop: warm terracotta/ember (#B8532F), bg (#F8EBE5)
+              // Rise: forest pine (#2F4A3D), bg (#EAF3ED)
+              // Flat: calm sage (#56826E), bg (#EEF2EF)
+              const accentColor = isDrop ? "#B8532F" : isRise ? tokens.pine : "#56826E"
+              const badgeBg = isDrop ? "#F8EBE5" : isRise ? tokens.pineSoft : "#EEF2EF"
+              
+              const category = getTopicCategory(topic)
+              const avatarStyle = getAvatarStyle(topic.profiles?.username, topic.profiles?.display_name)
+              const authorInitial = (topic.profiles?.display_name || topic.profiles?.username || 'T').charAt(0).toUpperCase()
+
               return (
                 <div 
                   key={topic.id} 
                   className="tl-entry tl-card-interactive"
                   onMouseEnter={preloadConfidenceChart}
                   style={{ 
-                    padding: "20px 22px",
+                    padding: "24px",
+                    borderRadius: 18,
                     position: "relative"
                   }}
                 >
+                  {/* Top Header Row */}
                   <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-3">
                       <button
                         onClick={() => navigate(`/${topic.profiles?.username}`)}
                         className="tl-focus"
                         style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
                         title={`View ${topic.profiles?.display_name || topic.profiles?.username}'s profile`}
                       >
-                        {topic.profiles?.avatar_url ? (
-                          <img 
-                            src={topic.profiles.avatar_url} 
-                            alt={topic.profiles.username} 
-                            className="tl-avatar"
-                          />
-                        ) : (
-                          <div className="tl-avatar">
-                            {(topic.profiles?.display_name || topic.profiles?.username || 'T').charAt(0).toUpperCase()}
-                          </div>
-                        )}
+                        <div 
+                          style={{
+                            width: 38,
+                            height: 38,
+                            borderRadius: "50%",
+                            background: avatarStyle.bg,
+                            color: avatarStyle.text,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontFamily: "var(--font-serif)",
+                            fontSize: 16,
+                            fontWeight: 700,
+                            flexShrink: 0,
+                            boxShadow: "0 1px 3px rgba(0,0,0,0.06)"
+                          }}
+                        >
+                          {authorInitial}
+                        </div>
                       </button>
 
                       <div className="flex flex-col" style={{ lineHeight: 1.25 }}>
@@ -433,7 +524,7 @@ export default function Discover() {
                           onClick={() => navigate(`/${topic.profiles?.username}`)}
                           className="tl-focus"
                           style={{ 
-                            fontSize: 13, 
+                            fontSize: 14.5, 
                             color: tokens.ink, 
                             background: "none", 
                             border: "none", 
@@ -445,14 +536,14 @@ export default function Discover() {
                         >
                           {topic.profiles?.display_name || topic.profiles?.username}
                         </button>
-                        <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint }}>
+                        <span className="tl-mono" style={{ fontSize: 12, color: tokens.inkFaint }}>
                           @{topic.profiles?.username || 'anonymous'}
                         </span>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                      <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint, background: tokens.paperDeep, padding: "2px 8px", borderRadius: 6 }}>
+                    <div className="flex items-center gap-2.5">
+                      <span className="tl-mono" style={{ fontSize: 12, color: tokens.inkSoft }}>
                         {topic.span}
                       </span>
                       
@@ -460,71 +551,138 @@ export default function Discover() {
                         onClick={() => toggleBookmark(topic.id)}
                         className="tl-focus btn-premium flex items-center justify-center"
                         title={isBookmarked ? "Remove bookmark" : "Save bookmark"}
-                        style={{ border: "none", background: "transparent", cursor: "pointer", color: isBookmarked ? tokens.pine : tokens.inkFaint, padding: 4 }}
+                        style={{ border: "none", background: "transparent", cursor: "pointer", color: isBookmarked ? tokens.pine : tokens.inkSoft, padding: 3 }}
                       >
-                        <Bookmark size={15} fill={isBookmarked ? tokens.pine : "none"} />
+                        <Bookmark size={16} fill={isBookmarked ? tokens.pine : "none"} strokeWidth={1.8} />
                       </button>
                     </div>
                   </div>
+
+                  {/* Category Pill Tag */}
+                  <div style={{ marginBottom: 12 }}>
+                    <span 
+                      style={{
+                        display: "inline-block",
+                        padding: "3px 10px",
+                        borderRadius: 999,
+                        fontSize: 11.5,
+                        fontWeight: 600,
+                        background: category.theme === 'sand' ? "#F3ECE2" : category.theme === 'lavender' ? "#EBE8F4" : tokens.pineSoft,
+                        color: category.theme === 'sand' ? "#745437" : category.theme === 'lavender' ? "#4A3F68" : tokens.pine,
+                      }}
+                    >
+                      {category.name}
+                    </span>
+                  </div>
                   
+                  {/* Topic Title (Headline) */}
                   <h3 
                     className="tl-display" 
                     style={{ 
-                      fontSize: 18, 
-                      fontWeight: 600, 
-                      margin: "0 0 10px", 
+                      fontSize: 21, 
+                      fontWeight: 700, 
+                      margin: "0 0 12px", 
                       cursor: "pointer", 
                       color: tokens.ink,
-                      lineHeight: 1.35
+                      lineHeight: 1.3
                     }}
                     onClick={() => handleOpenTopic(topic)}
                   >
                     {topic.title}
                   </h3>
                   
-                  <p style={{ fontSize: 14, lineHeight: 1.6, color: tokens.inkSoft, margin: "0 0 16px" }}>
+                  {/* Content Excerpt */}
+                  <p style={{ fontSize: 14.5, lineHeight: 1.6, color: tokens.inkSoft, margin: "0 0 18px" }}>
                     {topic.latestPost?.content}
                   </p>
                   
-                  <div className="flex items-center justify-between flex-wrap gap-3" style={{ paddingTop: 12, borderTop: `1px solid ${tokens.line}` }}>
+                  {/* Divider Line */}
+                  <div style={{ height: 1, background: tokens.line, marginBottom: 16 }} />
+
+                  {/* Footer Row: Metrics & Actions */}
+                  <div className="flex items-center justify-between flex-wrap gap-3">
                     <div className="flex items-center gap-3">
-                      <MiniSparkline data={topic.public_posts} width={88} height={24} />
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="tl-mono" style={{ fontSize: 12, color: tokens.ink }}>
-                          <strong style={{ color: tokens.pine, fontWeight: 600 }}>{topic.latestConfidence}%</strong> conviction
+                      {/* Big Conviction Stat */}
+                      <div className="flex flex-col" style={{ lineHeight: 1 }}>
+                        <span 
+                          style={{ 
+                            fontSize: 32, 
+                            fontWeight: 700, 
+                            fontFamily: "var(--font-serif)",
+                            color: tokens.ink, 
+                            letterSpacing: "-0.02em" 
+                          }}
+                        >
+                          {latestConf}%
                         </span>
-                        {topic.delta > 0 && (
-                          <span className="tl-mono" style={{ fontSize: 11, color: tokens.plum, opacity: 0.9 }}>
-                            ({topic.delta}% shift)
-                          </span>
-                        )}
+                        <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint, marginTop: 4 }}>
+                          conviction
+                        </span>
+                      </div>
+
+                      {/* Delta Badge */}
+                      {deltaAbs > 0 && (
+                        <span 
+                          className="tl-mono flex items-center gap-1"
+                          style={{ 
+                            fontSize: 12, 
+                            fontWeight: 600, 
+                            background: badgeBg, 
+                            color: accentColor, 
+                            padding: "3px 8px", 
+                            borderRadius: 999 
+                          }}
+                        >
+                          {isDrop ? "↓" : "↑"} {deltaAbs}%
+                        </span>
+                      )}
+
+                      {/* Sparkline Curve */}
+                      <div style={{ marginLeft: 4 }}>
+                        <MiniSparkline 
+                          data={topic.public_posts} 
+                          width={130} 
+                          height={30} 
+                          color={accentColor}
+                          strokeWidth={2.2}
+                          nodeRadius={3.5}
+                          showFill={false}
+                        />
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-3">
                       <button
                         onClick={() => handleShare(topic)}
-                        className="tl-focus btn-premium flex items-center gap-1"
-                        style={{ border: "none", background: "none", cursor: "pointer", color: tokens.inkSoft, fontSize: 12, fontWeight: 500, padding: "4px 8px" }}
+                        className="tl-focus btn-premium"
+                        style={{ 
+                          border: "none", 
+                          background: "none", 
+                          cursor: "pointer", 
+                          color: tokens.inkSoft, 
+                          fontSize: 13, 
+                          fontWeight: 500, 
+                          padding: "6px 8px" 
+                        }}
                       >
-                        <Share2 size={13} /> Share
+                        Share
                       </button>
 
                       <button 
                         onClick={() => handleOpenTopic(topic)} 
-                        className="tl-focus flex items-center gap-1 btn-premium" 
+                        className="tl-focus btn-premium" 
                         style={{ 
                           border: "none", 
                           background: tokens.pineSoft, 
                           color: tokens.pine,
-                          borderRadius: 6,
-                          padding: "5px 11px",
+                          borderRadius: 8,
+                          padding: "8px 16px",
                           cursor: "pointer", 
-                          fontSize: 12, 
+                          fontSize: 13, 
                           fontWeight: 600, 
                         }}
                       >
-                        Read throughline <ArrowUpRight size={13} />
+                        Read throughline
                       </button>
                     </div>
                   </div>

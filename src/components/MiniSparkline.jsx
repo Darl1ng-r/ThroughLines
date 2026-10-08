@@ -8,9 +8,12 @@ import React, { useId } from 'react'
  */
 export default function MiniSparkline({ 
   data = [], 
-  width = 96, 
-  height = 26, 
+  width = 120, 
+  height = 30, 
   color = "var(--color-pine)",
+  strokeWidth = 2.2,
+  showFill = false,
+  nodeRadius = 3.5,
   ariaLabel = "Belief trajectory sparkline" 
 }) {
   const gradientId = useId()
@@ -55,10 +58,10 @@ export default function MiniSparkline({
     }
   }
 
-  // Build closed area path for the subtle translucent fill
+  // Build closed area path for the subtle translucent fill if enabled
   const lastCoord = coords[coords.length - 1]
   const firstCoord = coords[0]
-  const areaD = coords.length > 1 
+  const areaD = (showFill && coords.length > 1)
     ? `${pathD} L ${lastCoord.x} ${height} L ${firstCoord.x} ${height} Z`
     : ""
 
@@ -70,15 +73,17 @@ export default function MiniSparkline({
       aria-label={ariaLabel}
       style={{ overflow: 'visible', flexShrink: 0 }}
     >
-      <defs>
-        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.22" />
-          <stop offset="100%" stopColor={color} stopOpacity="0.0" />
-        </linearGradient>
-      </defs>
+      {showFill && (
+        <defs>
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.18" />
+            <stop offset="100%" stopColor={color} stopOpacity="0.0" />
+          </linearGradient>
+        </defs>
+      )}
 
       {/* Translucent area fill */}
-      {areaD && (
+      {showFill && areaD && (
         <path 
           d={areaD} 
           fill={`url(#${gradientId})`} 
@@ -90,24 +95,17 @@ export default function MiniSparkline({
         d={pathD}
         fill="none"
         stroke={color}
-        strokeWidth="1.8"
+        strokeWidth={strokeWidth}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
 
-      {/* Glowing terminal node */}
+      {/* Terminal node point */}
       <circle 
         cx={lastCoord.x} 
         cy={lastCoord.y} 
-        r="2.5" 
+        r={nodeRadius} 
         fill={color} 
-      />
-      <circle 
-        cx={lastCoord.x} 
-        cy={lastCoord.y} 
-        r="5" 
-        fill={color} 
-        opacity="0.25"
       />
     </svg>
   )
