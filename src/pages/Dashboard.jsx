@@ -693,14 +693,68 @@ export default function Dashboard() {
       />
 
       {/* Main Workspace - Entries and Line Graph */}
-      <div className="tl-scroll" style={{ flex: 1, overflowY: "auto", maxHeight: "calc(100vh - 58px)", minHeight: 0, position: "relative" }}>
-        <div className="tl-ambient-glow" aria-hidden="true" />
+      <div className="tl-scroll" style={{ flex: 1, overflowY: "auto", maxHeight: "calc(100vh - 58px)", minHeight: 0, position: "relative", isolation: "isolate" }}>
+        <div className="tl-dashboard-ambient" aria-hidden="true" />
         {!selectedTopic ? (
-          <div className="flex flex-col items-center justify-center" style={{ height: "100%", padding: 40, textAlign: "center" }}>
-            <p className="tl-display" style={{ fontSize: 20, color: tokens.inkSoft }}>🌿 Pick a throughline, or start a new theme.</p>
+          <div className="flex flex-col items-center justify-center" style={{ minHeight: "80%", padding: "40px 20px", textAlign: "center", position: "relative", zIndex: 10 }}>
+            <div 
+              className="tl-card-frosted" 
+              style={{ 
+                maxWidth: 480, 
+                padding: "36px 32px", 
+                display: "flex", 
+                flexDirection: "column", 
+                alignItems: "center", 
+                gap: 16 
+              }}
+            >
+              <div 
+                style={{ 
+                  width: 54, 
+                  height: 54, 
+                  borderRadius: 16, 
+                  background: tokens.pineSoft, 
+                  color: tokens.pine, 
+                  display: "flex", 
+                  alignItems: "center", 
+                  justifyContent: "center", 
+                  fontSize: 26,
+                  boxShadow: "0 0 24px rgba(86, 130, 110, 0.25)"
+                }}
+                aria-hidden="true"
+              >
+                🌿
+              </div>
+              <div>
+                <h2 className="tl-display" style={{ fontSize: 22, fontWeight: 600, margin: "0 0 6px", color: tokens.ink }}>
+                  Cultivate your throughlines
+                </h2>
+                <p style={{ fontSize: 13.5, color: tokens.inkSoft, margin: 0, lineHeight: 1.55 }}>
+                  Select an existing theme from the sidebar to inspect its conviction graph, or plant a new idea to track how your thoughts develop over time.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowNewTopic(true)}
+                className="tl-focus btn-premium"
+                style={{
+                  marginTop: 6,
+                  padding: "8px 18px",
+                  borderRadius: 8,
+                  background: tokens.pine,
+                  color: tokens.paper,
+                  border: "none",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  boxShadow: "0 2px 10px rgba(47, 74, 61, 0.2)"
+                }}
+              >
+                + New Throughline
+              </button>
+            </div>
           </div>
         ) : (
-          <div style={{ maxWidth: 640, margin: "0 auto", padding: "36px 24px 80px" }}>
+          <div style={{ maxWidth: 640, margin: "0 auto", padding: "36px 24px 80px", position: "relative", zIndex: 10 }}>
             <div className="flex items-center justify-between flex-wrap gap-3" style={{ marginBottom: 20 }}>
               <div>
                 <h1 className="tl-display" style={{ fontSize: 28, fontWeight: 600, margin: "0 0 4px" }}>
@@ -714,7 +768,7 @@ export default function Dashboard() {
               </div>
 
               {/* Action Toolbar */}
-              <div className="flex items-center gap-2 flex-wrap no-print">
+              <div className="flex items-center gap-2 flex-wrap no-print" style={{ position: "relative", zIndex: 15 }}>
                 <button 
                   onClick={exportMarkdown} 
                   className="tl-focus btn-premium flex items-center gap-1"
@@ -746,7 +800,7 @@ export default function Dashboard() {
 
             {/* Filter & Search Bar */}
             {entries.length > 0 && (
-              <div className="flex items-center gap-2 flex-wrap no-print" style={{ marginBottom: 20, background: tokens.card, border: `1px solid ${tokens.line}`, borderRadius: 8, padding: "8px 12px" }}>
+              <div className="tl-card-frosted flex items-center gap-2 flex-wrap no-print" style={{ marginBottom: 20, padding: "8px 14px" }}>
                 <div className="flex items-center gap-2 flex-1" style={{ minWidth: 180 }}>
                   <Search size={14} color={tokens.inkFaint} />
                   <input
@@ -920,7 +974,7 @@ export default function Dashboard() {
 
       {/* Share Card Modal */}
       {showShareModal && selectedTopic && (
-        <div className="tl-modal-overlay" onClick={() => setShowShareModal(false)}>
+        <div className="tl-modal-overlay" style={{ zIndex: 9999 }} onClick={() => setShowShareModal(false)}>
           <div 
             onClick={(e) => e.stopPropagation()} 
             style={{ 
@@ -930,7 +984,9 @@ export default function Dashboard() {
               padding: 24, 
               maxWidth: 480, 
               width: "100%", 
-              boxShadow: "0 12px 32px rgba(0,0,0,0.18)" 
+              boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
+              position: "relative",
+              zIndex: 10000
             }}
           >
             <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>

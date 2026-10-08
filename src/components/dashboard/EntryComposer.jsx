@@ -43,14 +43,11 @@ const EntryComposer = memo(function EntryComposer({
         }} 
       />
       <div 
-        className="tl-card tl-card-interactive"
+        className="tl-card-frosted tl-card-interactive"
         style={{ 
           flex: 1, 
-          background: tokens.card, 
-          border: `1px solid ${tokens.line}`, 
-          borderRadius: 12, 
-          padding: "16px 18px",
-          boxShadow: "var(--shadow-card)",
+          borderRadius: 14, 
+          padding: "18px 20px",
           transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)"
         }}
       >

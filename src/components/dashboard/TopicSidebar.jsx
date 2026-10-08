@@ -61,7 +61,9 @@ const TopicSidebar = memo(function TopicSidebar({
         background: tokens.card, 
         display: "flex", 
         flexDirection: "column",
-        flexShrink: 0
+        flexShrink: 0,
+        position: "relative",
+        zIndex: 20
       }}
       className="no-print"
     >

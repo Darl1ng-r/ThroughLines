@@ -103,18 +103,18 @@ function NavBar() {
       <div className="flex items-center gap-6">
         <Link
           to={user ? "/dashboard" : "/"}
-          style={{ textDecoration: 'none', color: 'inherit' }}
+          style={{ textDecoration: 'none', color: '#F1EEE4' }}
           aria-label="Throughline home"
         >
           <div className="flex items-center gap-2">
             <div
               className="tl-display"
-              style={{ width: 26, height: 26, borderRadius: 6, background: tokens.pine, color: tokens.paper, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700 }}
+              style={{ width: 26, height: 26, borderRadius: 6, background: "rgba(255, 255, 255, 0.14)", border: "1px solid rgba(255, 255, 255, 0.22)", color: "#F1EEE4", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700 }}
               aria-hidden="true"
             >
               🌿
             </div>
-            <span className="tl-display" style={{ fontSize: 17, fontWeight: 600 }}>Throughline</span>
+            <span className="tl-display" style={{ fontSize: 17, fontWeight: 600, color: "#F1EEE4" }}>Throughline</span>
           </div>
         </Link>
 
@@ -129,12 +129,12 @@ function NavBar() {
                   style={{
                     padding: "6px 12px",
                     borderRadius: 999,
-                    border: "none",
+                    border: location.pathname.startsWith('/dashboard') ? "1px solid rgba(255, 255, 255, 0.20)" : "1px solid transparent",
                     cursor: "pointer",
                     fontSize: 13,
                     fontWeight: 500,
-                    background: location.pathname.startsWith('/dashboard') ? tokens.paperDeep : "transparent",
-                    color: tokens.ink
+                    background: location.pathname.startsWith('/dashboard') ? "rgba(255, 255, 255, 0.18)" : "transparent",
+                    color: location.pathname.startsWith('/dashboard') ? "#FFFFFF" : "rgba(241, 238, 228, 0.80)"
                   }}
                 >
                   Dashboard
@@ -148,12 +148,12 @@ function NavBar() {
                   style={{
                     padding: "6px 12px",
                     borderRadius: 999,
-                    border: "none",
+                    border: location.pathname === '/discover' ? "1px solid rgba(255, 255, 255, 0.20)" : "1px solid transparent",
                     cursor: "pointer",
                     fontSize: 13,
                     fontWeight: 500,
-                    background: location.pathname === '/discover' ? tokens.paperDeep : "transparent",
-                    color: tokens.ink
+                    background: location.pathname === '/discover' ? "rgba(255, 255, 255, 0.18)" : "transparent",
+                    color: location.pathname === '/discover' ? "#FFFFFF" : "rgba(241, 238, 228, 0.80)"
                   }}
                 >
                   <Compass size={13} aria-hidden="true" /> Discover
@@ -174,9 +174,9 @@ function NavBar() {
             width: 32,
             height: 32,
             borderRadius: "50%",
-            border: `1px solid ${tokens.line}`,
-            background: tokens.card,
-            color: tokens.ink,
+            border: "1px solid rgba(255, 255, 255, 0.18)",
+            background: "rgba(255, 255, 255, 0.12)",
+            color: "#F1EEE4",
             cursor: "pointer"
           }}
         >
@@ -197,11 +197,11 @@ function NavBar() {
               <div
                 className="tl-mono"
                 aria-hidden="true"
-                style={{ width: 28, height: 28, borderRadius: "50%", background: tokens.plumSoft, color: tokens.plum, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600 }}
+                style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(255, 255, 255, 0.18)", border: "1px solid rgba(255, 255, 255, 0.25)", color: "#FFFFFF", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 600 }}
               >
                 {initials}
               </div>
-              <ChevronDown size={14} color={tokens.inkFaint} aria-hidden="true" />
+              <ChevronDown size={14} color="rgba(241, 238, 228, 0.75)" aria-hidden="true" />
             </button>
 
             {menuOpen && (
@@ -216,15 +216,16 @@ function NavBar() {
                   background: tokens.card,
                   border: `1px solid ${tokens.line}`,
                   borderRadius: 10,
-                  boxShadow: "0 8px 24px rgba(33,31,27,0.08)",
-                  overflow: "hidden"
+                  boxShadow: "0 8px 24px rgba(33,31,27,0.18)",
+                  overflow: "hidden",
+                  color: tokens.ink
                 }}
               >
                 <div
                   style={{ padding: "10px 14px", borderBottom: `1px solid ${tokens.line}` }}
                   role="presentation"
                 >
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{profile?.display_name || user.email}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: tokens.ink }}>{profile?.display_name || user.email}</div>
                   <div className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint }}>@{profile?.username || "loading"}</div>
                 </div>
 
@@ -232,7 +233,7 @@ function NavBar() {
                   role="menuitem"
                   onClick={() => { navigate(`/${profile?.username}`); setMenuOpen(false); }}
                   className="tl-focus flex items-center gap-2"
-                  style={{ width: "100%", padding: "10px 14px", border: "none", background: "transparent", cursor: "pointer", fontSize: 13, textAlign: "left" }}
+                  style={{ width: "100%", padding: "10px 14px", border: "none", background: "transparent", cursor: "pointer", fontSize: 13, textAlign: "left", color: tokens.ink }}
                 >
                   <UserIcon size={14} aria-hidden="true" /> View profile
                 </button>
@@ -241,7 +242,7 @@ function NavBar() {
                   role="menuitem"
                   onClick={() => { navigate('/settings'); setMenuOpen(false); }}
                   className="tl-focus flex items-center gap-2"
-                  style={{ width: "100%", padding: "10px 14px", border: "none", background: "transparent", cursor: "pointer", fontSize: 13, textAlign: "left" }}
+                  style={{ width: "100%", padding: "10px 14px", border: "none", background: "transparent", cursor: "pointer", fontSize: 13, textAlign: "left", color: tokens.ink }}
                 >
                   <SettingsIcon size={14} aria-hidden="true" /> Settings
                 </button>
@@ -273,13 +274,13 @@ function NavBar() {
               <button
                 className="tl-focus btn-premium"
                 style={{
-                  background: tokens.pine,
-                  color: tokens.paper,
+                  background: "#F1EEE4",
+                  color: "#2F4A3D",
                   border: 'none',
                   borderRadius: 8,
                   padding: '6px 14px',
                   fontSize: 13,
-                  fontWeight: 500,
+                  fontWeight: 600,
                   cursor: 'pointer'
                 }}
               >
