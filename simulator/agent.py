@@ -4,7 +4,7 @@ Manages memory, epistemic conviction tracking, and LLM action selection.
 """
 
 import json
-import random
+import secrets
 import uuid
 import urllib.request
 import urllib.error
@@ -12,6 +12,8 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 
 from .config import LLM_PROVIDER, GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, OLLAMA_BASE_URL, MODEL_NAME
+
+_rng = secrets.SystemRandom()
 
 class ThroughlineAgent:
     def __init__(self, persona: Dict[str, Any]):
@@ -73,16 +75,16 @@ class ThroughlineAgent:
             except Exception as e:
                 print(f"[Agent {self.username}] LLM call failed ({e}), falling back to heuristic engine.")
 
-        return self._decide_action_heuristic(available_topics, round_num)
+        return self._decide_action_heuristic(available_topics)
 
-    def _decide_action_heuristic(self, available_topics: List[Dict[str, Any]], round_num: int) -> Dict[str, Any]:
+    def _decide_action_heuristic(self, available_topics: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Realistic heuristic belief engine modeling conviction drift and discourse."""
-        action_roll = random.random()
+        action_roll = _rng.random()
 
         # Case 1: Nudge someone else's topic (15% chance if other topics exist)
         other_topics = [t for t in available_topics if t.get("username") != self.username]
         if action_roll < 0.15 and other_topics:
-            target = random.choice(other_topics)
+            target = _rng.choice(other_topics)
             return {
                 "action": "NUDGE",
                 "topic_id": target["id"],
@@ -92,16 +94,16 @@ class ThroughlineAgent:
 
         # Case 2: Create a new topic (20% chance or if no active topics)
         if (action_roll < 0.35 or not self.active_topics) and len(self.active_topics) < 5:
-            new_domain = random.choice(self.core_domains) if self.core_domains else "Cognitive Bias"
+            new_domain = _rng.choice(self.core_domains) if self.core_domains else "Cognitive Bias"
             topic_titles = [
                 f"How {new_domain} will fundamentally reshape institutional trust by 2028",
                 f"Why current consensus on {new_domain} fails to model non-linear feedback loops",
                 f"The hidden trade-off between speed and epistemic rigor in {new_domain}",
                 f"Decentralized approaches to {new_domain} vs centralized governance models"
             ]
-            chosen_title = random.choice(topic_titles)
+            chosen_title = _rng.choice(topic_titles)
             slug = chosen_title.lower().replace(" ", "-")[:45].strip("-")
-            init_conf = random.randint(35, 85)
+            init_conf = _rng.randint(35, 85)
             thought = f"Beginning to map out my thesis on {chosen_title}. The initial evidence is promising but high variance."
             
             created = self.add_topic(chosen_title, slug, thought, init_conf)
@@ -113,12 +115,13 @@ class ThroughlineAgent:
             }
 
         # Case 3: Evolve thought & shift conviction on an existing topic (65% standard)
-        slug, topic = random.choice(list(self.active_topics.items()))
+        slug, topic = _rng.choice(list(self.active_topics.items()))
         old_conf = topic["current_confidence"]
 
         # Calculate conviction shift based on volatility
-        delta_max = 18 if self.conviction_volatility == "high" else (10 if self.conviction_volatility == "medium" else 5)
-        delta = random.randint(-delta_max, delta_max)
+        volatility_deltas = {"high": 18, "medium": 10}
+        delta_max = volatility_deltas.get(self.conviction_volatility, 5)
+        delta = _rng.randint(-delta_max, delta_max)
         new_conf = max(5, min(98, old_conf + delta))
 
         reflection_templates = [
@@ -127,7 +130,7 @@ class ThroughlineAgent:
             f"New observation on '{topic['title']}': Shifted conviction to {new_conf}%. We need to distinguish between short-term noise and structural trends.",
             f"Re-evaluating prior conviction ({old_conf}% to {new_conf}%). Found substantive friction points in the implementation feasibility."
         ]
-        thought_content = random.choice(reflection_templates)
+        thought_content = _rng.choice(reflection_templates)
 
         entry_data = {
             "id": str(uuid.uuid4()),
@@ -186,7 +189,7 @@ Return strict JSON format:
                     parsed = json.loads(result_json)
                     return self._apply_llm_action(parsed)
 
-        return self._decide_action_heuristic(available_topics, round_num)
+        return self._decide_action_heuristic(available_topics)
 
     def _apply_llm_action(self, parsed: Dict[str, Any]) -> Dict[str, Any]:
         action_type = parsed.get("action", "ADD_ENTRY")
@@ -200,7 +203,7 @@ Return strict JSON format:
         
         # Default to ADD_ENTRY on first topic
         if self.active_topics:
-            slug, topic = list(self.active_topics.items())[0]
+            slug, topic = next(iter(self.active_topics.items()))
             conf = int(parsed.get("confidence", topic["current_confidence"]))
             content = parsed.get("content", "Revisiting assumptions.")
             topic["current_confidence"] = conf
@@ -220,4 +223,4 @@ Return strict JSON format:
                 "confidence": conf,
                 "is_public": True
             }
-        return self._decide_action_heuristic([], 1)
+        return self._decide_action_heuristic([])

@@ -1,12 +1,104 @@
-import React, { createContext, useContext, useState, useEffect } from 'react'
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '../services/supabaseClient'
 
 const AuthContext = createContext({})
+
+async function authSignUp(email, password, username, displayName) {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        username,
+        display_name: displayName
+      }
+    }
+  })
+  if (error) throw error
+  return data
+}
+
+async function authSignIn(email, password) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password
+  })
+  if (error) throw error
+  return data
+}
+
+async function authSignOut() {
+  const { error } = await supabase.auth.signOut()
+  if (error) throw error
+}
+
+async function authSignInWithGoogle() {
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: `${window.location.origin}/dashboard`
+    }
+  })
+  if (error) throw error
+  return data
+}
+
+async function authSignInWithGoogleCredential(idToken) {
+  const { data, error } = await supabase.auth.signInWithIdToken({
+    provider: 'google',
+    token: idToken
+  })
+  if (error) throw error
+  return data
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+
+  const fetchProfile = useCallback(async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle()
+
+      if (error) throw error
+
+      if (!data) {
+        // Auto-create missing profile for OAuth / new users
+        const { data: userData } = await supabase.auth.getUser()
+        const meta = userData?.user?.user_metadata || {}
+        const rawName = meta.full_name || meta.name || userData?.user?.email?.split('@')[0] || "Thinker"
+        const randSuffix = (crypto.getRandomValues(new Uint32Array(1))[0] % 1000)
+        const cleanUsername = (meta.username || rawName).toLowerCase().replace(/[^a-z0-9_]/g, '') + randSuffix
+        
+        const { data: newProfile, error: createErr } = await supabase
+          .from('profiles')
+          .insert({
+            id: userId,
+            username: cleanUsername,
+            display_name: rawName,
+            bio: "Writing throughlines on evolving thoughts."
+          })
+          .select()
+          .single()
+
+        if (!createErr && newProfile) {
+          setProfile(newProfile)
+          return
+        }
+      }
+
+      setProfile(data)
+    } catch (err) {
+      console.error('Error fetching user profile:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     let isMounted = true
@@ -25,7 +117,7 @@ export function AuthProvider({ children }) {
         const session = data?.session
         if (session) {
           setUser(session.user)
-          fetchProfile(session.user.id)
+          void fetchProfile(session.user.id)
         } else {
           setLoading(false)
         }
@@ -53,100 +145,9 @@ export function AuthProvider({ children }) {
       clearTimeout(timeoutId)
       subscription?.unsubscribe?.()
     }
-  }, [])
+  }, [fetchProfile])
 
-  async function fetchProfile(userId) {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle()
-
-      if (error) throw error
-
-      if (!data) {
-        // Auto-create missing profile for OAuth / new users
-        const { data: userData } = await supabase.auth.getUser()
-        const meta = userData?.user?.user_metadata || {}
-        const rawName = meta.full_name || meta.name || userData?.user?.email?.split('@')[0] || "Thinker"
-        const cleanUsername = (meta.username || rawName).toLowerCase().replace(/[^a-z0-9_]/g, '') + Math.floor(Math.random() * 1000)
-        
-        const { data: newProfile, error: createErr } = await supabase
-          .from('profiles')
-          .insert({
-            id: userId,
-            username: cleanUsername,
-            display_name: rawName,
-            bio: "Writing throughlines on evolving thoughts."
-          })
-          .select()
-          .single()
-
-        if (!createErr && newProfile) {
-          setProfile(newProfile)
-          return
-        }
-      }
-
-      setProfile(data)
-    } catch (err) {
-      console.error('Error fetching user profile:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function signUp(email, password, username, displayName) {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          username,
-          display_name: displayName
-        }
-      }
-    })
-    if (error) throw error
-    return data
-  }
-
-  async function signIn(email, password) {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    })
-    if (error) throw error
-    return data
-  }
-
-  async function signOut() {
-    const { error } = await supabase.auth.signOut()
-    if (error) throw error
-  }
-
-  async function signInWithGoogle() {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/dashboard`
-      }
-    })
-    if (error) throw error
-    return data
-  }
-
-  async function signInWithGoogleCredential(idToken) {
-    const { data, error } = await supabase.auth.signInWithIdToken({
-      provider: 'google',
-      token: idToken
-    })
-    if (error) throw error
-    return data
-  }
-
-  async function updateProfile(updates) {
+  const updateProfile = useCallback(async (updates) => {
     if (!user) return
     // Whitelist fields to prevent Mass Assignment / Over-posting vulnerabilities
     const allowed = {}
@@ -161,10 +162,30 @@ export function AuthProvider({ children }) {
 
     if (error) throw error
     await fetchProfile(user.id)
-  }
+  }, [user, fetchProfile])
+
+  const refreshProfile = useCallback(() => {
+    if (user?.id) {
+      return fetchProfile(user.id)
+    }
+    return Promise.resolve()
+  }, [user?.id, fetchProfile])
+
+  const contextValue = useMemo(() => ({
+    user,
+    profile,
+    loading,
+    signIn: authSignIn,
+    signUp: authSignUp,
+    signInWithGoogle: authSignInWithGoogle,
+    signInWithGoogleCredential: authSignInWithGoogleCredential,
+    signOut: authSignOut,
+    updateProfile,
+    refreshProfile
+  }), [user, profile, loading, updateProfile, refreshProfile])
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, signUp, signInWithGoogle, signInWithGoogleCredential, signOut, updateProfile, refreshProfile: () => fetchProfile(user.id) }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   )

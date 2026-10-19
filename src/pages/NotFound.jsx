@@ -19,7 +19,7 @@ export default function NotFound() {
   }, [])
 
   return (
-    <div
+    <main
       style={{
         flex: 1,
         display: 'flex',
@@ -31,7 +31,6 @@ export default function NotFound() {
         color: tokens.ink,
         minHeight: 'calc(100vh - 58px)',
       }}
-      role="main"
       aria-labelledby="not-found-title"
     >
       <div
@@ -120,6 +119,6 @@ export default function NotFound() {
           </button>
         </div>
       </div>
-    </div>
+    </main>
   )
 }

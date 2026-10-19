@@ -141,7 +141,7 @@ export default function CommandPalette({
   const filteredItems = trimmed
     ? allItems.filter(item => 
         item.title.toLowerCase().includes(trimmed) || 
-        (item.subtitle && item.subtitle.toLowerCase().includes(trimmed))
+        item.subtitle?.toLowerCase().includes(trimmed)
       )
     : allItems
 
@@ -175,7 +175,7 @@ export default function CommandPalette({
 
   return (
     <div 
-      className="tl-modal-overlay"
+      className="tl-modal-container"
       style={{
         position: "fixed",
         top: 0,
@@ -191,19 +191,35 @@ export default function CommandPalette({
         paddingTop: "12vh",
         paddingLeft: "16px",
         paddingRight: "16px",
-        background: "rgba(10, 15, 12, 0.65)",
-        backdropFilter: "blur(8px)",
-        WebkitBackdropFilter: "blur(8px)",
         overflowY: "auto"
       }}
-      onClick={onClose}
     >
+      <button
+        type="button"
+        aria-label="Close command palette"
+        onClick={onClose}
+        style={{
+          position: "fixed",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          background: "rgba(10, 15, 12, 0.65)",
+          backdropFilter: "blur(8px)",
+          WebkitBackdropFilter: "blur(8px)",
+          border: "none",
+          padding: 0,
+          margin: 0,
+          cursor: "default"
+        }}
+      />
       <div 
         className="tl-card animate-fade-in"
         role="dialog"
         aria-modal="true"
         aria-label="Command Palette"
         style={{
+          position: "relative",
+          zIndex: 1,
           width: "100%",
           maxWidth: 580,
           background: tokens.card,
@@ -212,7 +228,6 @@ export default function CommandPalette({
           boxShadow: "0 24px 60px rgba(0, 0, 0, 0.28), 0 4px 16px rgba(0, 0, 0, 0.12)",
           overflow: "hidden"
         }}
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Search Input Bar */}
         <div 
@@ -276,12 +291,16 @@ export default function CommandPalette({
             filteredItems.map((item, idx) => {
               const isSelected = idx === selectedIndex
               return (
-                <div 
+                <button 
+                  type="button"
                   key={item.id}
                   onClick={() => item.action()}
                   onMouseEnter={() => setSelectedIndex(idx)}
                   className="flex items-center justify-between"
                   style={{
+                    width: "100%",
+                    border: "none",
+                    textAlign: "left",
                     padding: "9px 12px",
                     borderRadius: 8,
                     cursor: "pointer",
@@ -334,7 +353,7 @@ export default function CommandPalette({
                       <ArrowRight size={13} />
                     </div>
                   )}
-                </div>
+                </button>
               )
             })
           )}

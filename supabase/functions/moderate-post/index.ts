@@ -5,7 +5,15 @@
 // 3. Automated AI Moderation API (OpenAI Moderation API / Perspective / Fallback LLM)
 // 4. Supabase Service Role Database Synchronization (Automatic row state update)
 
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined
+  }
+}
+
+// @ts-ignore: Deno URL module imports resolved at runtime by Supabase Edge Runtime
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+// @ts-ignore: Deno URL module imports resolved at runtime by Supabase Edge Runtime
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7'
 
 const corsHeaders = {
@@ -80,10 +88,10 @@ export function normalizeText(rawText: string): string {
     (_, a, b, c, d, e) => `${a}${b}${c}${d || ''}${e || ''}`
   )
 
-  // 9. Normalize intra-word punctuation
-  clean = clean.split(/\s+/).map(word => {
-    if (/^[a-z0-9]+([\.\-_]+[a-z0-9]+)+$/i.test(word)) {
-      return word.replace(/[\.\-_]+/g, '')
+  // 9. Normalize intra-word punctuation without redundant escape characters
+  clean = clean.split(/\s+/).map((word) => {
+    if (/^[a-z0-9]+([._-]+[a-z0-9]+)+$/i.test(word)) {
+      return word.replace(/[._-]+/g, '')
     }
     return word
   }).join(' ')
@@ -91,15 +99,71 @@ export function normalizeText(rawText: string): string {
   return clean
 }
 
-const HEURISTIC_PATTERNS = {
-  HATE_SPEECH: /\b(n+i+g+g+[e3a]+r+|n+i+g+g+a+|k+i+k+e+|ch+i+n+k+|g+o+o+k+|w+e+t+b+a+c+k+|s+p+i+c+|r+a+g+h+e+a+d+|c+o+o+n+s?|f+a+g+g+o+t+|f+a+g+s?|d+y+k+e+s?|t+r+a+n+n+y|t+r+a+n+n+i+e+s?|r+e+t+a+r+d+[es]?|white\s+supremac(y|ist)|neo-?nazi|gas\s+the\s+jews)\b/i,
-  VIOLENCE_AND_THREATS: /\b(kill\s+(your|ur)self|commit\s+suicide|go\s+die|die\s+in\s+a\s+fire|i\s+will\s+(kill|murder|hunt|shoot|stab|rape)(\s+(you|u))?|slit\s+(your|ur)?\s*throat|death\s+threat|bomb\s+threat)\b/i,
-  HARASSMENT_AND_ABUSE: /\b(piece\s+of\s+shit|worthless\s+trash|shut\s+the\s+fuck\s+up|mother\s*fucker|eat\s+shit|go\s+fuck\s+yourself|fuck\s+you|fuck\s+off)\b/i,
-  OBSCENITY_AND_SEXUAL: /\b(c+u+n+t+s?|p+u+s+s+y|d+i+c+k+h+e+a+d+|c+o+c+k+s+u+c+k+[e3]r+|b+i+t+c+h+e?s?|b+a+s+t+a+r+d+s?|f+[*u@va]+c+k+[a-z]*|s+h+i+t+[a-z]*|a+s+s+h+o+l+e+s?|b+u+l+l+s+h+i+t+|porn|porno|pornography|blowjob|handjob|deepthroat|gangbang)\b/i,
-  SCAMS_AND_SPAM: /\b(casino|crypto-?airdrop|free-?followers|phishing|whatsapp\s+investment|telegram\s+signals)\b/i
+// Bounded heuristic patterns grouped to prevent ReDoS backtracking and maintain low regex complexity
+const HEURISTIC_RULES: Record<string, RegExp[]> = {
+  HATE_SPEECH: [
+    /\b(nigg(er|ers|a|as)|kikes?|chinks?|gooks?)\b/i,
+    /\b(wetbacks?|spics?|ragheads?|coons?)\b/i,
+    /\b(faggots?|fags?|dykes?|trann(y|ies))\b/i,
+    /\b(retards?|retarded)\b/i,
+    /\b(white\s+supremac(y|ist)|neo-?nazi|gas\s+the\s+jews)\b/i,
+  ],
+  VIOLENCE_AND_THREATS: [
+    /\b(kill\s+(your|ur)self|commit\s+suicide|go\s+die|die\s+in\s+a\s+fire)\b/i,
+    /\b(i\s+will\s+(kill|murder|hunt|shoot|stab|rape)(\s+(you|u))?)\b/i,
+    /\b(slit\s+(?:your\s+|ur\s+)?throat)\b/i,
+    /\b(death\s+threat|bomb\s+threat)\b/i,
+  ],
+  HARASSMENT_AND_ABUSE: [
+    /\b(piece\s+of\s+shit|worthless\s+trash|shut\s+the\s+fuck\s+up)\b/i,
+    /\b(mother\s*fuck(er|ing)?|dumb\s*ass|dumb\s*fuck)\b/i,
+    /\b(eat\s+shit|go\s+fuck\s+yourself|fuck\s+you|fuck\s+off)\b/i,
+  ],
+  OBSCENITY_AND_SEXUAL: [
+    /\b(cunts?|pussy|dickheads?|cocksuckers?)\b/i,
+    /\b(bitch(es)?|bastards?)\b/i,
+    /\b(f[au]ck(s|ed|ing|er|ers)?|shit(s|ting|ty|ted|head)?)\b/i,
+    /\b(assholes?|bullshit)\b/i,
+    /\b(porn|porno|pornography|blowjob|handjob|deepthroat|gangbang)\b/i,
+  ],
+  SCAMS_AND_SPAM: [
+    /\b(casino|crypto-?airdrop|free-?followers|phishing)\b/i,
+    /\b(whatsapp\s+investment|telegram\s+signals)\b/i,
+  ],
 }
 
-async function evaluateWithAI(content: string, apiKey?: string): Promise<{ flagged: boolean; categories: string[]; scores?: Record<string, number> }> {
+function checkStructuralLimits(trimmed: string): string[] {
+  const flagged: string[] = []
+  if (trimmed.length > 5000) {
+    flagged.push('Length Limit Exceeded (> 5000 chars)')
+  }
+  const httpCount = (trimmed.match(/https?:\/\//gi) || []).length
+  if (httpCount > 3) {
+    flagged.push('Excessive Links (> 3 links)')
+  }
+  return flagged
+}
+
+function checkHeuristicPatterns(normalizedText: string): string[] {
+  const flagged: string[] = []
+  for (const [name, patterns] of Object.entries(HEURISTIC_RULES)) {
+    if (patterns.some((regex) => regex.test(normalizedText))) {
+      flagged.push(name)
+    }
+  }
+  return flagged
+}
+
+interface AIModerationResult {
+  flagged: boolean
+  categories: string[]
+  scores?: Record<string, number>
+}
+
+async function evaluateWithAI(
+  content: string,
+  apiKey?: string
+): Promise<AIModerationResult> {
   if (!apiKey) {
     return { flagged: false, categories: [] }
   }
@@ -108,7 +172,7 @@ async function evaluateWithAI(content: string, apiKey?: string): Promise<{ flagg
     const response = await fetch('https://api.openai.com/v1/moderations', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({ input: content }),
@@ -142,7 +206,78 @@ async function evaluateWithAI(content: string, apiKey?: string): Promise<{ flagg
   }
 }
 
-serve(async (req) => {
+interface ModerationEvaluation {
+  isFlagged: boolean
+  moderationStatus: 'flagged' | 'approved'
+  moderationReason: string
+  flaggedCategories: string[]
+  aiModerationUsed: boolean
+  aiScores?: Record<string, number>
+}
+
+async function runModerationPipeline(content: string): Promise<ModerationEvaluation> {
+  const trimmed = content.trim()
+  const flaggedCategories: string[] = [
+    ...checkStructuralLimits(trimmed),
+    ...checkHeuristicPatterns(normalizeText(trimmed))
+  ]
+
+  let aiModerationUsed = false
+  let aiScores: Record<string, number> | undefined
+
+  const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
+  if (flaggedCategories.length === 0 && openaiApiKey) {
+    aiModerationUsed = true
+    const aiResult = await evaluateWithAI(trimmed, openaiApiKey)
+    if (aiResult.flagged) {
+      flaggedCategories.push(...aiResult.categories.map((c) => `AI: ${c}`))
+      aiScores = aiResult.scores
+    }
+  }
+
+  const isFlagged = flaggedCategories.length > 0
+  return {
+    isFlagged,
+    moderationStatus: isFlagged ? 'flagged' : 'approved',
+    moderationReason: isFlagged ? flaggedCategories.join(', ') : 'Verified clean',
+    flaggedCategories,
+    aiModerationUsed,
+    aiScores
+  }
+}
+
+async function syncModerationToDatabase(
+  postId: string,
+  moderationStatus: string,
+  moderationReason: string
+): Promise<void> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+  if (!postId || !supabaseUrl || !supabaseKey) {
+    return
+  }
+
+  try {
+    const supabase = createClient(supabaseUrl, supabaseKey)
+    const { error: dbError } = await supabase
+      .from('public_posts')
+      .update({
+        moderation_status: moderationStatus,
+        moderation_reason: moderationReason,
+        moderated_at: new Date().toISOString()
+      })
+      .eq('id', postId)
+
+    if (dbError) {
+      console.error(`[DB Sync Error] Failed to update post ${postId}:`, dbError)
+    }
+  } catch (dbErr) {
+    console.error(`[DB Client Exception] ${postId}:`, dbErr)
+  }
+}
+
+serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -160,72 +295,20 @@ serve(async (req) => {
       })
     }
 
-    const trimmed = String(content).trim()
-    const httpCount = (trimmed.match(/https?:\/\//gi) || []).length
-    const isExcessiveLength = trimmed.length > 5000
-    const isExcessiveLinks = httpCount > 3
+    const evaluation = await runModerationPipeline(String(content))
 
-    const flaggedCategories: string[] = []
-    if (isExcessiveLength) flaggedCategories.push('Length Limit Exceeded (> 5000 chars)')
-    if (isExcessiveLinks) flaggedCategories.push('Excessive Links (> 3 links)')
-
-    // 1. Fast Pattern Check on normalized text
-    const normalized = normalizeText(trimmed)
-    for (const [name, regex] of Object.entries(HEURISTIC_PATTERNS)) {
-      if (regex.test(normalized)) {
-        flaggedCategories.push(name)
-      }
-    }
-
-    let aiModerationUsed = false
-    let aiScores = undefined
-
-    // 2. Automated AI Semantic Moderation (if not already caught by heuristic and API key configured)
-    const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
-    if (flaggedCategories.length === 0 && openaiApiKey) {
-      aiModerationUsed = true
-      const aiResult = await evaluateWithAI(trimmed, openaiApiKey)
-      if (aiResult.flagged) {
-        flaggedCategories.push(...aiResult.categories.map(c => `AI: ${c}`))
-        aiScores = aiResult.scores
-      }
-    }
-
-    const isFlagged = flaggedCategories.length > 0
-    const moderationStatus = isFlagged ? 'flagged' : 'approved'
-    const moderationReason = isFlagged ? flaggedCategories.join(', ') : 'Verified clean'
-
-    // 3. Database Synchronization via Supabase Service Role (if postId provided)
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    if (postId && supabaseUrl && supabaseKey) {
-      try {
-        const supabase = createClient(supabaseUrl, supabaseKey)
-        const { error: dbError } = await supabase
-          .from('public_posts')
-          .update({
-            moderation_status: moderationStatus,
-            moderation_reason: moderationReason,
-            moderated_at: new Date().toISOString()
-          })
-          .eq('id', postId)
-
-        if (dbError) {
-          console.error(`[DB Sync Error] Failed to update post ${postId}:`, dbError)
-        }
-      } catch (dbErr) {
-        console.error(`[DB Client Exception] ${postId}:`, dbErr)
-      }
+    if (postId) {
+      await syncModerationToDatabase(postId, evaluation.moderationStatus, evaluation.moderationReason)
     }
 
     return new Response(
       JSON.stringify({
         postId,
-        moderationStatus,
-        flaggedCategories,
-        moderationReason,
-        aiModerationUsed,
-        aiScores,
+        moderationStatus: evaluation.moderationStatus,
+        flaggedCategories: evaluation.flaggedCategories,
+        moderationReason: evaluation.moderationReason,
+        aiModerationUsed: evaluation.aiModerationUsed,
+        aiScores: evaluation.aiScores,
         processedAt: new Date().toISOString()
       }),
       {
@@ -233,9 +316,10 @@ serve(async (req) => {
         status: 200
       }
     )
-  } catch (err) {
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : 'Internal Server Error'
     return new Response(
-      JSON.stringify({ error: err.message }),
+      JSON.stringify({ error: errorMessage }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500

@@ -48,10 +48,10 @@ jobs:
 
       - name: Build Production Bundle
         env:
-          VITE_SUPABASE_URL: ${{ secrets['VITE_SUPABASE_URL'] || 'https://placeholder.supabase.co' }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets['VITE_SUPABASE_ANON_KEY'] || 'placeholder_anon_key' }}
-          VITE_APP_URL: ${{ secrets['VITE_APP_URL'] || 'https://placeholder.app' }}
-          VITE_GOOGLE_CLIENT_ID: ${{ secrets['VITE_GOOGLE_CLIENT_ID'] || 'placeholder' }}
-          VITE_SENTRY_DSN: ${{ secrets['VITE_SENTRY_DSN'] || '' }}
-          VITE_REDIS_PROXY_URL: ${{ secrets['VITE_REDIS_PROXY_URL'] || '' }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || 'placeholder_anon_key' }}
+          VITE_APP_URL: ${{ secrets.VITE_APP_URL || 'https://placeholder.app' }}
+          VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID || 'placeholder' }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN || '' }}
+          VITE_REDIS_PROXY_URL: ${{ secrets.VITE_REDIS_PROXY_URL || '' }}
         run: npm run build

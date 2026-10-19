@@ -1,4 +1,12 @@
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined
+  }
+}
+
+// @ts-ignore: Deno URL module imports resolved at runtime by Supabase Edge Runtime
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
+// @ts-ignore: Deno URL module imports resolved at runtime by Supabase Edge Runtime
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const UPSTASH_URL = Deno.env.get('UPSTASH_REDIS_REST_URL')
@@ -24,7 +32,7 @@ function getCorsHeaders(origin: string) {
   }
 }
 
-serve(async (req) => {
+serve(async (req: Request): Promise<Response> => {
   const origin = req.headers.get('Origin') || ''
   const corsHeaders = getCorsHeaders(origin)
 
@@ -42,7 +50,7 @@ serve(async (req) => {
 
     // Require valid authentication
     const authHeader = req.headers.get('Authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return new Response(JSON.stringify({ error: 'Unauthorized: missing authorization bearer token' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -113,8 +121,9 @@ serve(async (req) => {
       status: upstreamRes.status,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
-  } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : 'Internal Server Error'
+    return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })

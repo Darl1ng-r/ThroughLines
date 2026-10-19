@@ -55,7 +55,7 @@ class SimulationEngine:
     def run_simulation(self, rounds: int = 5):
         """Runs the multi-turn interaction loop across all synthetic agents."""
         print("\n" + "=" * 65)
-        print(f"🌐 Initiating Throughlines Social Simulation (OASIS Paradigm)")
+        print("🌐 Initiating Throughlines Social Simulation (OASIS Paradigm)")
         print(f"👥 Active Agents: {len(self.agents)} | 🔄 Timestep Rounds: {rounds}")
         print("=" * 65 + "\n")
 

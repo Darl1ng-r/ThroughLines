@@ -4,7 +4,7 @@ import { supabase } from '../services/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 const ConfidenceChart = lazy(() => import('../components/ConfidenceChart'))
 import ErrorBoundary from '../components/ErrorBoundary'
-import { ArrowLeft, User } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 
 import MarkdownText from '../components/MarkdownText'
 
@@ -25,7 +25,13 @@ const tokens = {
 }
 
 function Meter({ value }) {
-  const barColor = value >= 70 ? tokens.pine : value >= 40 ? "#56826E" : tokens.ember
+  let barColor = tokens.ember
+  if (value >= 70) {
+    barColor = tokens.pine
+  } else if (value >= 40) {
+    barColor = "#56826E"
+  }
+
   return (
     <div className="flex items-center gap-2">
       <div style={{ width: 48, height: 5, borderRadius: 3, background: tokens.line, overflow: "hidden" }}>
@@ -56,7 +62,7 @@ export default function TopicDetail() {
   const [nudgeCooldown, setNudgeCooldown] = useState(0)
   const [hasNudged, setHasNudged] = useState(false)
 
-  const isSelf = currentProfile && currentProfile.username === username
+  const isSelf = currentProfile?.username === username
 
   function handleSelectEntry(id) {
     setSelectedEntryId(id)
@@ -67,7 +73,7 @@ export default function TopicDetail() {
   }
 
   useEffect(() => {
-    fetchTopicData(Boolean(initialTopic))
+    void fetchTopicData(Boolean(initialTopic))
   }, [username, topicSlug])
 
   async function fetchTopicData(isBackground = false) {
@@ -101,7 +107,7 @@ export default function TopicDetail() {
         `)
         .eq('slug', topicSlug)
         .eq('profiles.username', username)
-        .order('entry_date', { foreignTable: 'public_posts', ascending: true })
+        .order('entry_date', { referencedTable: 'public_posts', ascending: true })
         .maybeSingle()
 
       if (queryErr) throw queryErr
@@ -114,7 +120,9 @@ export default function TopicDetail() {
 
       setProfile(data.profiles)
       setTopic(data)
-      const approvedPosts = (data.public_posts || []).filter(p => p.moderation_status === 'approved')
+      const approvedPosts = (data.public_posts || [])
+        .filter(p => p.moderation_status === 'approved')
+        .sort((a, b) => new Date(a.entry_date) - new Date(b.entry_date))
       setPosts(approvedPosts)
     } catch (err) {
       console.error('Error fetching topic detail:', err)
@@ -341,11 +349,11 @@ export default function TopicDetail() {
               }}
             >
               <span>
-                {hasNudged 
-                  ? "✓ Nudge Sent" 
-                  : nudgeCooldown > 0 
-                    ? `Nudge (${nudgeCooldown}s)` 
-                    : "🔔 Nudge for update"}
+                {(() => {
+                  if (hasNudged) return "✓ Nudge Sent"
+                  if (nudgeCooldown > 0) return `Nudge (${nudgeCooldown}s)`
+                  return "🔔 Nudge for update"
+                })()}
               </span>
             </button>
           )}
@@ -386,16 +394,31 @@ export default function TopicDetail() {
                 let formattedDate = entry.entry_date
                 try {
                   const d = new Date(entry.entry_date)
-                  if (!isNaN(d.getTime())) {
+                  if (!Number.isNaN(d.getTime())) {
                     formattedDate = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
                   }
-                } catch (_) {}
+                } catch {
+                  // Fallback to raw entry_date if date string parsing fails
+                }
 
                 const isSelected = selectedEntryId === entry.id
                 const isLatest = index === posts.length - 1
-                const nodeColor = isSelected 
-                  ? tokens.ember 
-                  : (entry.confidence_rating >= 70 ? tokens.pine : entry.confidence_rating >= 40 ? '#56826E' : tokens.ember)
+                
+                let nodeColor = tokens.ember
+                if (!isSelected) {
+                  if (entry.confidence_rating >= 70) {
+                    nodeColor = tokens.pine
+                  } else if (entry.confidence_rating >= 40) {
+                    nodeColor = '#56826E'
+                  }
+                }
+
+                let nodeBoxShadow = "none"
+                if (isLatest) {
+                  nodeBoxShadow = `0 0 0 3px ${nodeColor}33, 0 0 8px ${nodeColor}44`
+                } else if (isSelected) {
+                  nodeBoxShadow = `0 0 0 3px ${tokens.ember}33`
+                }
 
                 return (
                   <div id={`entry-${entry.id}`} key={entry.id} className="tl-entry flex gap-4" style={{ position: "relative" }}>
@@ -406,9 +429,7 @@ export default function TopicDetail() {
                         borderRadius: "50%", 
                         background: isSelected ? tokens.ember : nodeColor, 
                         border: `2.5px solid ${isSelected ? tokens.ember : nodeColor}`, 
-                        boxShadow: isLatest 
-                          ? `0 0 0 3px ${nodeColor}33, 0 0 8px ${nodeColor}44` 
-                          : (isSelected ? `0 0 0 3px ${tokens.ember}33` : "none"),
+                        boxShadow: nodeBoxShadow,
                         flexShrink: 0, 
                         marginTop: 6,
                         transition: "all 0.25s ease"

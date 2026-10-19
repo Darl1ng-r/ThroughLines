@@ -1,5 +1,5 @@
-import http from 'http'
-import https from 'https'
+import http from 'node:http'
+import https from 'node:https'
 
 /**
  * ThroughLines Performance & Concurrent Load Benchmark
@@ -63,7 +63,7 @@ function printReport() {
 
   const avg = (latencies.reduce((a, b) => a + b, 0) / latencies.length || 0).toFixed(2)
   const min = latencies[0] || 0
-  const max = latencies[latencies.length - 1] || 0
+  const max = latencies.at(-1) || 0
   const p50 = latencies[Math.floor(latencies.length * 0.5)] || 0
   const p95 = latencies[Math.floor(latencies.length * 0.95)] || 0
   const p99 = latencies[Math.floor(latencies.length * 0.99)] || 0

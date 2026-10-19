@@ -37,29 +37,30 @@ function shouldBypassCache(request) {
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(SHELL_ASSETS).catch((err) => {
+    (async () => {
+      try {
+        const cache = await caches.open(CACHE_NAME)
+        await cache.addAll(SHELL_ASSETS)
+      } catch (err) {
         console.warn('SW shell pre-cache non-blocking error:', err)
-      })
-    })
+      }
+    })()
   )
   self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cache) => {
-          // Purge all old cache versions on activate
-          if (cache !== CACHE_NAME) {
-            return caches.delete(cache)
-          }
-        })
+    (async () => {
+      const cacheNames = await caches.keys()
+      await Promise.all(
+        cacheNames
+          .filter((cache) => cache !== CACHE_NAME)
+          .map((cache) => caches.delete(cache))
       )
-    })
+      await self.clients.claim()
+    })()
   )
-  self.clients.claim()
 })
 
 self.addEventListener('fetch', (event) => {
@@ -72,20 +73,19 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
   if (event.request.mode === 'navigate' || url.pathname === '/') {
     event.respondWith(
-      fetch(event.request)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const clone = networkResponse.clone()
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put('/index.html', clone)
-            })
+      (async () => {
+        try {
+          const networkResponse = await fetch(event.request)
+          if (networkResponse?.status === 200) {
+            const cache = await caches.open(CACHE_NAME)
+            await cache.put('/index.html', networkResponse.clone())
           }
           return networkResponse
-        })
-        .catch(async () => {
+        } catch {
           const cached = await caches.match('/index.html')
-          return cached || caches.match('/')
-        })
+          return cached || (await caches.match('/'))
+        }
+      })()
     )
     return
   }
@@ -93,33 +93,35 @@ self.addEventListener('fetch', (event) => {
   // Cache-first strategy for immutable static assets (JS, CSS, fonts with content hashes)
   if (url.pathname.startsWith('/assets/')) {
     event.respondWith(
-      caches.match(event.request).then((cached) => {
+      (async () => {
+        const cached = await caches.match(event.request)
         if (cached) return cached
-        return fetch(event.request).then((response) => {
-          if (response && response.status === 200 && response.type === 'basic') {
-            const cloned = response.clone()
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cloned))
-          }
-          return response
-        })
-      })
+
+        const response = await fetch(event.request)
+        if (response?.status === 200 && response.type === 'basic') {
+          const cache = await caches.open(CACHE_NAME)
+          await cache.put(event.request, response.clone())
+        }
+        return response
+      })()
     )
     return
   }
 
   // Network-first with cache fallback for everything else
   event.respondWith(
-    fetch(event.request)
-      .then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-          const responseToCache = networkResponse.clone()
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache)
-          })
+    (async () => {
+      try {
+        const networkResponse = await fetch(event.request)
+        if (networkResponse?.status === 200 && networkResponse.type === 'basic') {
+          const cache = await caches.open(CACHE_NAME)
+          await cache.put(event.request, networkResponse.clone())
         }
         return networkResponse
-      })
-      .catch(() => caches.match(event.request))
+      } catch {
+        return caches.match(event.request)
+      }
+    })()
   )
 })
 
@@ -131,7 +133,7 @@ self.addEventListener('push', (event) => {
   if (event.data) {
     try {
       data = event.data.json()
-    } catch (_) {
+    } catch {
       data.body = event.data.text()
     }
   }

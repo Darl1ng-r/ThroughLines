@@ -44,6 +44,21 @@ function getPageTitle(pathname) {
   return 'Throughline'
 }
 
+function getInitials(profile, user) {
+  if (profile?.display_name) {
+    return profile.display_name
+      .split(" ")
+      .map(w => w[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase()
+  }
+  if (user?.email) {
+    return user.email.slice(0, 2).toUpperCase()
+  }
+  return "?"
+}
+
 // Subcomponent: Navigation Bar
 function NavBar({ onOpenCommandPalette, theme, toggleTheme }) {
   const { user, profile, signOut } = useAuth()
@@ -85,9 +100,7 @@ function NavBar({ onOpenCommandPalette, theme, toggleTheme }) {
   // Don't show navigation on the Landing/Auth page
   if (location.pathname === '/') return null
 
-  const initials = profile?.display_name
-    ? profile.display_name.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase()
-    : user?.email ? user.email.slice(0, 2).toUpperCase() : "?"
+  const initials = getInitials(profile, user)
 
   return (
     <header className="tl-topbar flex items-center justify-between" role="banner">
@@ -234,7 +247,6 @@ function NavBar({ onOpenCommandPalette, theme, toggleTheme }) {
               >
                 <div
                   style={{ padding: "10px 14px", borderBottom: `1px solid ${tokens.line}` }}
-                  role="presentation"
                 >
                   <div style={{ fontSize: 13, fontWeight: 600, color: tokens.ink }}>{profile?.display_name || user.email}</div>
                   <div className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint }}>@{profile?.username || "loading"}</div>
@@ -342,7 +354,7 @@ function MainLayout() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
+    document.documentElement.dataset.theme = theme
     localStorage.setItem('theme', theme)
   }, [theme])
 

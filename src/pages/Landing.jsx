@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { checkPasswordBreached } from '../services/passwordSecurityService'
@@ -25,19 +25,7 @@ const tokens = {
 const MAX_FAILURES = 5
 const LOCKOUT_SECONDS = 30
 
-export default function Landing() {
-  const navigate = useNavigate()
-  const { signIn, signUp, signInWithGoogle, signInWithGoogleCredential } = useAuth()
-
-  const [mode, setMode] = useState("login") // 'login' or 'signup'
-  const [displayName, setDisplayName] = useState("")
-  const [username, setUsername] = useState("")
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [errorMsg, setErrorMsg] = useState("")
-  const [loading, setLoading] = useState(false)
-
-  // Auth rate-limiting state
+function useAuthLockout() {
   const [failureCount, setFailureCount] = useState(0)
   const [lockoutUntil, setLockoutUntil] = useState(null)
   const [lockoutSeconds, setLockoutSeconds] = useState(0)
@@ -70,10 +58,49 @@ export default function Landing() {
     }
   }
 
-  const isLockedOut = lockoutUntil && Date.now() < lockoutUntil
+  function resetFailures() {
+    setFailureCount(0)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (lockoutTimerRef.current) clearInterval(lockoutTimerRef.current)
+    }
+  }, [])
+
+  const isLockedOut = Boolean(lockoutUntil && Date.now() < lockoutUntil)
+
+  return {
+    failureCount,
+    lockoutSeconds,
+    isLockedOut,
+    recordFailure,
+    resetFailures
+  }
+}
+
+export default function Landing() {
+  const navigate = useNavigate()
+  const { signIn, signUp, signInWithGoogle, signInWithGoogleCredential } = useAuth()
+
+  const [mode, setMode] = useState("login") // 'login' or 'signup'
+  const [displayName, setDisplayName] = useState("")
+  const [username, setUsername] = useState("")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [errorMsg, setErrorMsg] = useState("")
+  const [loading, setLoading] = useState(false)
+
+  const {
+    failureCount,
+    lockoutSeconds,
+    isLockedOut,
+    recordFailure,
+    resetFailures
+  } = useAuthLockout()
 
   // Handle Google Platform & Identity callbacks
-  React.useEffect(() => {
+  useEffect(() => {
     window.onSignIn = async (googleUser) => {
       try {
         setLoading(true)
@@ -94,10 +121,7 @@ export default function Landing() {
         setLoading(false)
       }
     }
-    return () => {
-      if (lockoutTimerRef.current) clearInterval(lockoutTimerRef.current)
-    }
-  }, [])
+  }, [signInWithGoogle, signInWithGoogleCredential, navigate])
 
   const canSubmit = !isLockedOut && !loading && (
     mode === "login"
@@ -105,37 +129,41 @@ export default function Landing() {
       : displayName.trim() && username.trim() && email.trim() && password.trim()
   )
 
+  async function executeSignUp() {
+    const breachCheck = await checkPasswordBreached(password)
+    if (breachCheck.isBreached) {
+      setErrorMsg(
+        `This password has appeared in ${breachCheck.count.toLocaleString()} known data breaches. Please choose a stronger, unique password.`
+      )
+      return
+    }
+
+    await signUp(email, password, username.toLowerCase(), displayName)
+    resetFailures()
+    setErrorMsg("Account created! Logging you in...")
+    setTimeout(() => {
+      navigate('/dashboard')
+    }, 1500)
+  }
+
+  async function executeLogin() {
+    await signIn(email, password)
+    resetFailures()
+    navigate('/dashboard')
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!canSubmit) return
-    if (isLockedOut) return
+    if (!canSubmit || isLockedOut) return
 
     setErrorMsg("")
     setLoading(true)
 
     try {
       if (mode === "login") {
-        await signIn(email, password)
-        setFailureCount(0) // reset on success
-        navigate('/dashboard')
+        await executeLogin()
       } else {
-        // Zero-cost privacy-preserving leaked password check (NIST SP 800-63B compliant)
-        const breachCheck = await checkPasswordBreached(password)
-        if (breachCheck.isBreached) {
-          setErrorMsg(
-            `This password has appeared in ${breachCheck.count.toLocaleString()} known data breaches. Please choose a stronger, unique password.`
-          )
-          setLoading(false)
-          return
-        }
-
-        await signUp(email, password, username.toLowerCase(), displayName)
-        setFailureCount(0) // reset on success
-        // Auto sign-in or prompt for email confirmation
-        setErrorMsg("Account created! Logging you in...")
-        setTimeout(() => {
-          navigate('/dashboard')
-        }, 1500)
+        await executeSignUp()
       }
     } catch (err) {
       console.error(err)
@@ -158,6 +186,11 @@ export default function Landing() {
     } finally {
       setLoading(false)
     }
+  }
+
+  let submitButtonText = mode === "login" ? "Log in" : "Create account"
+  if (loading) {
+    submitButtonText = "Authenticating..."
   }
 
   return (
@@ -214,7 +247,7 @@ export default function Landing() {
 
             {/* SVG Smooth Curve */}
             <div style={{ position: "relative", width: "100%", height: 56, marginBottom: 10 }}>
-              <svg viewBox="0 0 300 56" style={{ width: "100%", height: "100%", overflow: "visible" }} preserveAspectRatio="none">
+              <svg viewBox="0 0 300 56" style={{ width: "100%", height: "100%", overflow: "visible" }} preserveAspectRatio="none" aria-hidden="true" role="img">
                 <defs>
                   <linearGradient id="heroGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#F1EEE4" stopOpacity="0.25" />
@@ -251,54 +284,80 @@ export default function Landing() {
       </div>
 
       {/* Right Panel: Authentication Form */}
-      <div className="flex flex-1 items-center justify-center" style={{ padding: 24 }}>
+      <div
+        className="flex items-center justify-center flex-1 p-6 sm:p-12"
+        style={{ background: tokens.paper }}
+      >
         <div style={{ width: "100%", maxWidth: 360 }}>
+          <h1 className="tl-display" style={{ fontSize: 24, fontWeight: 600, marginBottom: 6 }}>
+            {mode === "login" ? "Welcome back" : "Create your notebook"}
+          </h1>
+          <p style={{ color: tokens.inkSoft, fontSize: 13.5, marginBottom: 20 }}>
+            {mode === "login" ? "Continue writing through your thoughts." : "Start tracking how your conviction changes."}
+          </p>
+
           {/* Mode Tabs */}
           <div
-            className="flex items-center gap-1"
+            className="flex p-1"
             role="tablist"
             aria-label="Authentication mode"
-            style={{ background: tokens.paperDeep, borderRadius: 999, padding: 4, marginBottom: 28 }}
+            style={{ background: tokens.paperDeep, borderRadius: 8, marginBottom: 18 }}
           >
             <button
               role="tab"
               aria-selected={mode === "login"}
+              aria-controls="auth-panel"
               onClick={() => { setMode("login"); setErrorMsg(""); }}
               className="tl-focus"
-              style={{ flex: 1, padding: "8px 0", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, background: mode === "login" ? tokens.card : "transparent", color: mode === "login" ? tokens.ink : tokens.inkSoft }}
+              style={{
+                flex: 1,
+                padding: "7px 0",
+                fontSize: 13,
+                fontWeight: 600,
+                borderRadius: 6,
+                border: "none",
+                cursor: "pointer",
+                background: mode === "login" ? tokens.card : "transparent",
+                color: mode === "login" ? tokens.ink : tokens.inkSoft,
+                boxShadow: mode === "login" ? "0 1px 3px rgba(33,31,27,0.08)" : "none",
+                transition: "all 0.15s ease",
+              }}
             >
               Log in
             </button>
             <button
               role="tab"
               aria-selected={mode === "signup"}
+              aria-controls="auth-panel"
               onClick={() => { setMode("signup"); setErrorMsg(""); }}
               className="tl-focus"
-              style={{ flex: 1, padding: "8px 0", borderRadius: 999, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, background: mode === "signup" ? tokens.card : "transparent", color: mode === "signup" ? tokens.ink : tokens.inkSoft }}
+              style={{
+                flex: 1,
+                padding: "7px 0",
+                fontSize: 13,
+                fontWeight: 600,
+                borderRadius: 6,
+                border: "none",
+                cursor: "pointer",
+                background: mode === "signup" ? tokens.card : "transparent",
+                color: mode === "signup" ? tokens.ink : tokens.inkSoft,
+                boxShadow: mode === "signup" ? "0 1px 3px rgba(33,31,27,0.08)" : "none",
+                transition: "all 0.15s ease",
+              }}
             >
               Sign up
             </button>
           </div>
 
-          <h1 className="tl-display" style={{ fontSize: 24, fontWeight: 600, marginBottom: 4 }}>
-            {mode === "login" ? "Welcome back" : "Start your throughline"}
-          </h1>
-          <p style={{ fontSize: 13, color: tokens.inkSoft, marginBottom: 22 }}>
-            {mode === "login" ? "Pick up where you left off." : "Takes about a minute. No credit card required."}
-          </p>
-
-          {/* Lockout Warning */}
+          {/* Lockout Warning Banner */}
           {isLockedOut && (
             <div
               role="alert"
-              aria-live="assertive"
-              className="flex items-start gap-2"
-              style={{ padding: "10px 12px", background: tokens.emberSoft, border: `1px solid ${tokens.ember}`, borderRadius: 8, marginBottom: 16 }}
+              className="flex items-center gap-2 p-3"
+              style={{ background: tokens.emberSoft, color: tokens.ember, borderRadius: 8, fontSize: 12.5, marginBottom: 16, border: `1px solid ${tokens.ember}` }}
             >
-              <AlertCircle size={15} style={{ color: tokens.ember, flexShrink: 0, marginTop: 1 }} aria-hidden="true" />
-              <p style={{ fontSize: 12, color: tokens.ember, margin: 0, lineHeight: 1.4 }}>
-                Too many failed attempts. Please wait <strong>{lockoutSeconds}s</strong> before trying again.
-              </p>
+              <AlertCircle size={16} style={{ flexShrink: 0 }} />
+              <span>Too many failed attempts. Locked out for {lockoutSeconds}s.</span>
             </div>
           )}
 
@@ -306,7 +365,7 @@ export default function Landing() {
             {mode === "signup" && (
               <>
                 <label className="flex flex-col gap-1" style={{ fontSize: 12, color: tokens.inkSoft, marginBottom: 12 }}>
-                  Display name
+                  <span>Display name</span>
                   <input
                     type="text"
                     required
@@ -319,7 +378,7 @@ export default function Landing() {
                   />
                 </label>
                 <label className="flex flex-col gap-1" style={{ fontSize: 12, color: tokens.inkSoft, marginBottom: 12 }}>
-                  Username
+                  <span>Username</span>
                   <input
                     type="text"
                     required
@@ -335,7 +394,7 @@ export default function Landing() {
             )}
 
             <label className="flex flex-col gap-1" style={{ fontSize: 12, color: tokens.inkSoft, marginBottom: 12 }}>
-              Email
+              <span>Email</span>
               <input
                 type="email"
                 required
@@ -349,7 +408,7 @@ export default function Landing() {
             </label>
 
             <label className="flex flex-col gap-1" style={{ fontSize: 12, color: tokens.inkSoft, marginBottom: 12 }}>
-              Password
+              <span>Password</span>
               <input
                 type="password"
                 required
@@ -387,7 +446,7 @@ export default function Landing() {
               style={{ width: "100%", padding: "11px 0", borderRadius: 8, border: "none", fontSize: 14, fontWeight: 600, cursor: (canSubmit && !loading && !isLockedOut) ? "pointer" : "not-allowed", background: tokens.pine, color: tokens.paper, opacity: (canSubmit && !loading && !isLockedOut) ? 1 : 0.45, marginTop: 4, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
             >
               {mode === "login" ? <LogIn size={16} aria-hidden="true" /> : <UserPlus size={16} aria-hidden="true" />}
-              <span>{loading ? "Authenticating..." : mode === "login" ? "Log in" : "Create account"}</span>
+              <span>{submitButtonText}</span>
             </button>
           </form>
 
@@ -398,28 +457,57 @@ export default function Landing() {
           </div>
 
           <div className="flex flex-col gap-2">
+            {/* Google Identity Services button container */}
+            <div id="googleBtn" style={{ width: "100%", minHeight: 40, display: "flex", justifyContent: "center" }} />
+
             <button
+              type="button"
               onClick={handleGoogleLogin}
-              disabled={isLockedOut || loading}
-              className="tl-focus flex items-center justify-center gap-2"
-              aria-label="Continue with Google account"
-              style={{ width: "100%", padding: "10px 0", borderRadius: 8, border: `1px solid ${tokens.line}`, background: tokens.card, color: tokens.ink, fontSize: 13, fontWeight: 500, cursor: (isLockedOut || loading) ? "not-allowed" : "pointer", opacity: (isLockedOut || loading) ? 0.5 : 1 }}
+              disabled={loading || isLockedOut}
+              className="tl-focus"
+              style={{
+                width: "100%",
+                padding: "9px 0",
+                borderRadius: 8,
+                border: `1px solid ${tokens.line}`,
+                background: tokens.card,
+                color: tokens.ink,
+                fontSize: 13,
+                fontWeight: 500,
+                cursor: (loading || isLockedOut) ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                transition: "all 0.15s ease"
+              }}
             >
-              <span className="tl-display" style={{ fontWeight: 700 }} aria-hidden="true">G</span> Continue with Google
+              <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+              </svg>
+              <span>Continue with Google</span>
             </button>
-            <div className="g-signin2" data-onsuccess="onSignIn" style={{ display: "flex", justifyContent: "center", width: "100%" }} aria-hidden="true"></div>
           </div>
 
-          {/* Privacy Shield Info */}
+          {/* Privacy & Zero-Knowledge Architecture Assurance */}
           <div
-            className="flex items-start gap-2"
-            style={{ marginTop: 24, padding: "10px 12px", background: tokens.pineSoft, borderRadius: 8 }}
-            role="note"
+            className="flex items-center gap-2 p-3 mt-4"
+            style={{
+              background: tokens.paperDeep,
+              border: `1px solid ${tokens.line}`,
+              borderRadius: 8,
+              fontSize: 11,
+              color: tokens.inkSoft,
+              lineHeight: 1.45,
+            }}
           >
-            <ShieldCheck size={16} style={{ color: tokens.pine, flexShrink: 0, marginTop: 1 }} aria-hidden="true" />
-            <p style={{ fontSize: 11, color: tokens.pine, margin: 0, lineHeight: 1.4 }}>
-              Private entries are encrypted end-to-end and are never accessible on the discover feed.
-            </p>
+            <ShieldCheck size={16} color={tokens.pine} style={{ flexShrink: 0 }} />
+            <span>
+              Your evolving viewpoints are private by default. Your entries stay locked until you choose to publish them.
+            </span>
           </div>
         </div>
       </div>

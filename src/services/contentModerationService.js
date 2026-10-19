@@ -18,7 +18,7 @@ const HOMOGLYPH_MAP = {
   '\u0456': 'i', '\u0406': 'i', // і, І
   '\u043E': 'o', '\u041E': 'o', // о, О
   '\u0440': 'p', '\u0420': 'p', // р, Р
-  '\u0441': 's', '\u0455': 's', // ѕ
+  '\u0455': 's', // ѕ
   '\u0445': 'x', '\u0425': 'x', // х, Х
   '\u0443': 'u', '\u0423': 'u', // у, У (visual u)
   '\u0432': 'b', '\u0412': 'b', // в, В
@@ -103,8 +103,8 @@ export function normalizeText(rawText) {
   // 9. Normalize intra-word punctuation (e.g. 'f.u.c.k.i.n.g' -> 'fucking', 'b-i-t-c-h' -> 'bitch', 'k.i.l.l' -> 'kill')
   // We only strip periods, hyphens, underscores between letters, not asterisk vowel replacements
   clean = clean.split(/\s+/).map(word => {
-    if (/^[a-z0-9]+([\.\-_]+[a-z0-9]+)+$/i.test(word)) {
-      return word.replace(/[\.\-_]+/g, '')
+    if (/^[a-z0-9]+([._-]+[a-z0-9]+)+$/i.test(word)) {
+      return word.replace(/[._-]+/g, '')
     }
     return word
   }).join(' ')
@@ -117,7 +117,7 @@ export function normalizeText(rawText) {
  */
 export function stripSeparators(text) {
   if (!text) return ''
-  return text.replace(/[\s\.\-_*#~`^+=|\\/]+/g, '')
+  return text.replace(/[\s._*#~`^+=|\\/-]+/g, '')
 }
 
 /**
@@ -127,10 +127,10 @@ const CATEGORIES = {
   HATE_SPEECH: {
     name: 'Hate Speech & Discriminatory Slurs',
     patterns: [
-      // Racial, ethnic, religious, and identity slurs
-      /\b(n+i+g+g+[e3a]+r+|n+i+g+g+a+|k+i+k+e+|ch+i+n+k+|g+o+o+k+|w+e+t+b+a+c+k+|s+p+i+c+|r+a+g+h+e+a+d+|c+o+o+n+s?)\b/i,
-      /\b(f+a+g+g+o+t+|f+a+g+s?|d+y+k+e+s?|t+r+a+n+n+y|t+r+a+n+n+i+e+s?)\b/i,
-      /\b(r+e+t+a+r+d+[es]?|r+e+t+a+r+d+e+d+)\b/i,
+      /\b(nigg(er|ers|a|as)|kikes?|chinks?|gooks?)\b/i,
+      /\b(wetbacks?|spics?|ragheads?|coons?)\b/i,
+      /\b(faggots?|fags?|dykes?|trann(y|ies))\b/i,
+      /\b(retards?|retarded)\b/i,
       /\b(white\s+supremac(y|ist)|neo-?nazi|hitler\s+was\s+right|gas\s+the\s+jews|subhuman\s+(race|people))\b/i
     ]
   },
@@ -139,7 +139,7 @@ const CATEGORIES = {
     patterns: [
       /\b(kill\s+(your|ur)self|commit\s+suicide|go\s+die|die\s+in\s+a\s+fire)\b/i,
       /\b(i\s+will\s+(kill|murder|hunt|shoot|stab|rape)(\s+(you|u))?)\b/i,
-      /\b(slit\s+(your|ur)?\s*throat)\b/i,
+      /\b(slit\s+(?:your\s+|ur\s+)?throat)\b/i,
       /\b(death\s+threat|bomb\s+threat|mass\s+shooting\s+threat|gonna\s+end\s+your\s+life)\b/i
     ]
   },
@@ -147,24 +147,25 @@ const CATEGORIES = {
     name: 'Harassment & Severe Disrespect',
     patterns: [
       /\b(piece\s+of\s+shit|worthless\s+trash|waste\s+of\s+breath|shut\s+the\s+fuck\s+up)\b/i,
-      /\b(mother\s*fucker|mother\s*fucking|dumb\s*ass|dumb\s*fuck)\b/i,
+      /\b(mother\s*fuck(er|ing)?|dumb\s*ass|dumb\s*fuck)\b/i,
       /\b(eat\s+shit|go\s+fuck\s+yourself|fuck\s+you|fuck\s+off)\b/i
     ]
   },
   OBSCENITY_AND_SEXUAL: {
     name: 'Explicit Vulgarity & Inappropriate Content',
     patterns: [
-      /\b(c+u+n+t+s?|p+u+s+s+y|d+i+c+k+h+e+a+d+|c+o+c+k+s+u+c+k+[e3]r+)\b/i,
-      /\b(b+i+t+c+h+e?s?|b+a+s+t+a+r+d+s?)\b/i,
-      /\b(f+[*u@va]+c+k+[a-z]*)\b/i,
-      /\b(s+h+i+t+[a-z]*|a+s+s+h+o+l+e+s?|b+u+l+l+s+h+i+t+)\b/i,
+      /\b(cunts?|pussy|dickheads?|cocksuckers?)\b/i,
+      /\b(bitch(es)?|bastards?)\b/i,
+      /\b(f[au]ck(s|ed|ing|er|ers)?|shit(s|ting|ty|ted|head)?)\b/i,
+      /\b(assholes?|bullshit)\b/i,
       /\b(porn|porno|pornography|blowjob|handjob|deepthroat|gangbang)\b/i
     ]
   },
   SCAMS_AND_SPAM: {
     name: 'Spam & Malicious Scams',
     patterns: [
-      /\b(casino|crypto-?airdrop|free-?followers|phishing|whatsapp\s+investment|telegram\s+signals)\b/i,
+      /\b(casino|crypto-?airdrop|free-?followers|phishing)\b/i,
+      /\b(whatsapp\s+investment|telegram\s+signals)\b/i,
       /\b(make\s+\$[0-9,]+\s+(daily|fast|from\s+home)|guaranteed\s+crypto\s+returns)\b/i
     ]
   }
@@ -233,7 +234,7 @@ export function moderateContent(text, options = {}) {
 
   for (const [categoryKey, categoryData] of Object.entries(CATEGORIES)) {
     for (const pattern of categoryData.patterns) {
-      const match = normalized.match(pattern)
+      const match = pattern.exec(normalized)
       if (match) {
         detectedDetails.push({ categoryKey, categoryName: categoryData.name })
         flaggedTerms.push(match[0])
