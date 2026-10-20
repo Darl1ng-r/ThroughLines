@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../services/supabaseClient'
-import { ArrowUpRight, Compass, Search, Bookmark, Share2 } from 'lucide-react'
+import { Compass, Search, Bookmark } from 'lucide-react'
 import { getCache, setCache, invalidateCache, getSyncCache } from '../services/redisCacheService'
 import { searchFeed } from '../services/semanticSearchService'
 import MiniSparkline from '../components/MiniSparkline'
@@ -81,10 +81,421 @@ function getAvatarStyle(username = '', displayName = '') {
   let hash = 0
   const str = u || displayName || 'author'
   for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i)
-    hash |= 0
+    hash = Math.trunc((hash << 5) - hash + (str.codePointAt(i) || 0))
   }
   return AVATAR_PALETTES[Math.abs(hash) % AVATAR_PALETTES.length]
+}
+
+function getTrendColors(diff, pine, pineSoft) {
+  if (diff < 0) {
+    return { accentColor: "#B8532F", badgeBg: "#F8EBE5" }
+  }
+  if (diff > 0) {
+    return { accentColor: pine, badgeBg: pineSoft }
+  }
+  return { accentColor: "#56826E", badgeBg: "#EEF2EF" }
+}
+
+function getCategoryThemeStyle(theme, pine, pineSoft) {
+  if (theme === 'sand') return { background: "#F3ECE2", color: "#745437" }
+  if (theme === 'lavender') return { background: "#EBE8F4", color: "#4A3F68" }
+  return { background: pineSoft, color: pine }
+}
+
+function processTopicPosts(rawTopics) {
+  return (rawTopics || [])
+    .filter(t => t.public_posts && t.public_posts.length > 0)
+    .map(t => {
+      const sortedPosts = [...t.public_posts].sort(
+        (a, b) => new Date(a.entry_date) - new Date(b.entry_date)
+      )
+      const firstConfidence = sortedPosts[0]?.confidence_rating ?? 50
+      const latestPost = sortedPosts.at(-1)
+      const latestConfidence = latestPost?.confidence_rating ?? 50
+      const delta = Math.abs(latestConfidence - firstConfidence)
+      const diff = latestConfidence - firstConfidence
+      
+      const lastDate = new Date(latestPost?.entry_date || new Date())
+      const now = new Date()
+      const daysAgo = Math.max(0, (now.getTime() - lastDate.getTime()) / (1000 * 3600 * 24))
+
+      return {
+        ...t,
+        public_posts: sortedPosts,
+        latestPost,
+        firstConfidence,
+        latestConfidence,
+        delta,
+        diff,
+        daysAgo,
+        span: `${sortedPosts.length} ${sortedPosts.length === 1 ? 'entry' : 'entries'}`
+      }
+    })
+}
+
+const FEED_PAGE_SIZE = 12
+
+function buildDiscoverQuery(cursor, cleanQuery) {
+  let req = supabase
+    .from('topics')
+    .select(`
+      id,
+      title,
+      slug,
+      user_id,
+      created_at,
+      profiles (
+        username,
+        display_name,
+        bio,
+        avatar_url
+      ),
+      public_posts!inner (
+        id,
+        content,
+        confidence_rating,
+        entry_date,
+        moderation_status
+      )
+    `)
+    .eq('public_posts.moderation_status', 'approved')
+    .order('created_at', { ascending: false })
+    .order('entry_date', { referencedTable: 'public_posts', ascending: true })
+    .limit(50, { referencedTable: 'public_posts' })
+    .limit(FEED_PAGE_SIZE)
+
+  if (cursor) {
+    req = req.lt('created_at', cursor)
+  }
+
+  const sanitized = cleanQuery.replace(/[^a-zA-Z0-9 _-]/g, '').trim()
+  if (sanitized) {
+    req = req.textSearch('fts', sanitized, { config: 'english', type: 'websearch' })
+  }
+  return req
+}
+
+async function checkCachedFeed(cursor, cleanQuery) {
+  if (cleanQuery) return null
+  const cacheKey = `discover_feed_cursor_${cursor || 'null'}`
+  const cached = await getCache(cacheKey)
+  if (cached && Array.isArray(cached) && cached.length > 0) {
+    return cached
+  }
+  return null
+}
+
+function tryGetInitialCachedFeed(cursor, cleanQuery) {
+  if (cleanQuery) return null
+  const cacheKey = `discover_feed_cursor_${cursor || 'null'}`
+  const syncCached = getSyncCache(cacheKey)
+  if (Array.isArray(syncCached) && syncCached.length > 0) {
+    return syncCached
+  }
+  return null
+}
+
+function applyFeedResults({ isInitial, cleanQuery, filtered, data, setTopics, setLastCursor, setHasMoreFeed }) {
+  if (isInitial) {
+    setTopics(filtered)
+    if (!cleanQuery) {
+      void setCache('discover_feed_cursor_null', filtered, 60)
+    }
+  } else {
+    setTopics(prev => [...prev, ...filtered])
+  }
+
+  if (data?.length) {
+    setLastCursor(data.at(-1)?.created_at)
+  }
+  setHasMoreFeed(data?.length === FEED_PAGE_SIZE)
+}
+
+function DiscoverCard({ topic, isBookmarked, onToggleBookmark, onShare, onOpenTopic, onHoverPreload, onNavigateAuthor }) {
+  const firstConf = topic.firstConfidence ?? topic.latestConfidence ?? 50
+  const latestConf = topic.latestConfidence ?? 50
+  const diff = topic.diff !== undefined ? topic.diff : (latestConf - firstConf)
+  const deltaAbs = Math.abs(diff)
+  const isDrop = diff < 0
+  
+  const { accentColor, badgeBg } = getTrendColors(diff, tokens.pine, tokens.pineSoft)
+  const category = getTopicCategory(topic)
+  const themeStyle = getCategoryThemeStyle(category.theme, tokens.pine, tokens.pineSoft)
+  const avatarStyle = getAvatarStyle(topic.profiles?.username, topic.profiles?.display_name)
+  const authorInitial = (topic.profiles?.display_name || topic.profiles?.username || 'T').charAt(0).toUpperCase()
+
+  return (
+    <div 
+      className="tl-entry tl-card-interactive"
+      onMouseEnter={onHoverPreload}
+      style={{ 
+        padding: "24px",
+        borderRadius: 18,
+        position: "relative"
+      }}
+    >
+      {/* Top Header Row */}
+      <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => onNavigateAuthor(topic.profiles?.username)}
+            className="tl-focus"
+            style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+            title={`View ${topic.profiles?.display_name || topic.profiles?.username}'s profile`}
+          >
+            <div 
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: "50%",
+                background: avatarStyle.bg,
+                color: avatarStyle.text,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontFamily: "var(--font-serif)",
+                fontSize: 16,
+                fontWeight: 700,
+                flexShrink: 0,
+                boxShadow: "0 1px 3px rgba(0,0,0,0.06)"
+              }}
+            >
+              {authorInitial}
+            </div>
+          </button>
+
+          <div className="flex flex-col" style={{ lineHeight: 1.25 }}>
+            <button 
+              type="button"
+              onClick={() => onNavigateAuthor(topic.profiles?.username)}
+              className="tl-focus"
+              style={{ 
+                fontSize: 14.5, 
+                color: tokens.ink, 
+                background: "none", 
+                border: "none", 
+                cursor: "pointer", 
+                fontWeight: 600, 
+                textAlign: "left",
+                padding: 0 
+              }}
+            >
+              {topic.profiles?.display_name || topic.profiles?.username}
+            </button>
+            <span className="tl-mono" style={{ fontSize: 12, color: tokens.inkFaint }}>
+              @{topic.profiles?.username || 'anonymous'}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          <span className="tl-mono" style={{ fontSize: 12, color: tokens.inkSoft }}>
+            {topic.span}
+          </span>
+          
+          <button
+            type="button"
+            onClick={() => onToggleBookmark(topic.id)}
+            className="tl-focus btn-premium flex items-center justify-center"
+            title={isBookmarked ? "Remove bookmark" : "Save bookmark"}
+            aria-label={isBookmarked ? "Remove bookmark" : "Save bookmark"}
+            style={{ border: "none", background: "transparent", cursor: "pointer", color: isBookmarked ? tokens.pine : tokens.inkSoft, padding: 3 }}
+          >
+            <Bookmark size={16} fill={isBookmarked ? tokens.pine : "none"} strokeWidth={1.8} />
+          </button>
+        </div>
+      </div>
+
+      {/* Category Pill Tag */}
+      <div style={{ marginBottom: 12 }}>
+        <span 
+          style={{
+            display: "inline-block",
+            padding: "3px 10px",
+            borderRadius: 999,
+            fontSize: 11.5,
+            fontWeight: 600,
+            background: themeStyle.background,
+            color: themeStyle.color,
+          }}
+        >
+          {category.name}
+        </span>
+      </div>
+      
+      {/* Topic Title (Headline) */}
+      <h3 
+        className="tl-display" 
+        style={{ 
+          fontSize: 21, 
+          fontWeight: 700, 
+          margin: "0 0 12px", 
+          lineHeight: 1.3
+        }}
+      >
+        <button 
+          type="button"
+          className="tl-display tl-focus text-left" 
+          style={{ 
+            fontSize: "inherit", 
+            fontWeight: "inherit", 
+            cursor: "pointer", 
+            color: tokens.ink,
+            lineHeight: "inherit",
+            background: "none",
+            border: "none",
+            padding: 0,
+            width: "100%",
+            textAlign: "left"
+          }}
+          onClick={() => onOpenTopic(topic)}
+        >
+          {topic.title}
+        </button>
+      </h3>
+      
+      {/* Content Excerpt */}
+      <p style={{ fontSize: 14.5, lineHeight: 1.6, color: tokens.inkSoft, margin: "0 0 18px" }}>
+        {topic.latestPost?.content}
+      </p>
+      
+      {/* Divider Line */}
+      <div style={{ height: 1, background: tokens.line, marginBottom: 16 }} />
+
+      {/* Footer Row: Metrics & Actions */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          {/* Big Conviction Stat */}
+          <div className="flex flex-col" style={{ lineHeight: 1 }}>
+            <span 
+              style={{ 
+                fontSize: 32, 
+                fontWeight: 700, 
+                fontFamily: "var(--font-serif)",
+                color: tokens.ink, 
+                letterSpacing: "-0.02em" 
+              }}
+            >
+              {latestConf}%
+            </span>
+            <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint, marginTop: 4 }}>
+              conviction
+            </span>
+          </div>
+
+          {/* Delta Badge */}
+          {deltaAbs > 0 && (
+            <span 
+              className="tl-mono flex items-center gap-1"
+              style={{ 
+                fontSize: 12, 
+                fontWeight: 600, 
+                background: badgeBg, 
+                color: accentColor, 
+                padding: "3px 8px", 
+                borderRadius: 999 
+              }}
+            >
+              {isDrop ? "↓" : "↑"} {deltaAbs}%
+            </span>
+          )}
+
+          {/* Sparkline Curve */}
+          <div style={{ marginLeft: 4 }}>
+            <MiniSparkline 
+              data={topic.public_posts} 
+              width={130} 
+              height={30} 
+              color={accentColor}
+              strokeWidth={2.2}
+              nodeRadius={3.5}
+              showFill={false}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => onShare(topic)}
+            className="tl-focus btn-premium"
+            style={{ 
+              border: "none", 
+              background: "none", 
+              cursor: "pointer", 
+              color: tokens.inkSoft, 
+              fontSize: 13, 
+              fontWeight: 500, 
+              padding: "6px 8px" 
+            }}
+          >
+            Share
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => onOpenTopic(topic)} 
+            className="tl-focus btn-premium" 
+            style={{ 
+              border: "none", 
+              background: tokens.pineSoft, 
+              color: tokens.pine,
+              borderRadius: 8,
+              padding: "8px 16px",
+              cursor: "pointer", 
+              fontSize: 13, 
+              fontWeight: 600, 
+            }}
+          >
+            Read throughline
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DiscoverFeedContent({ loading, sortedFeed, feedTab, bookmarks, onToggleBookmark, onShare, onOpenTopic, onHoverPreload, onNavigateAuthor }) {
+  if (loading) {
+    return (
+      <div style={{ textAlign: "center", padding: "40px 0", color: tokens.inkSoft }} className="tl-mono">
+        Loading public minds...
+      </div>
+    )
+  }
+  if (sortedFeed.length === 0) {
+    const title = feedTab === "bookmarked" ? "No bookmarked throughlines yet" : "No throughlines found"
+    const description = feedTab === "bookmarked" 
+      ? "Click the bookmark icon on any public throughline to save it here." 
+      : "Try adjusting your search terms or check back later."
+    return (
+      <div style={{ textAlign: "center", padding: "40px 0", color: tokens.inkSoft, background: tokens.card, borderRadius: 10, border: `1px dashed ${tokens.line}` }}>
+        <p className="tl-display" style={{ fontSize: 16, marginBottom: 4 }}>
+          {title}
+        </p>
+        <p style={{ fontSize: 13, color: tokens.inkFaint }}>
+          {description}
+        </p>
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-col gap-6">
+      {sortedFeed.map((topic) => (
+        <DiscoverCard
+          key={topic.id}
+          topic={topic}
+          isBookmarked={bookmarks.includes(topic.id)}
+          onToggleBookmark={onToggleBookmark}
+          onShare={onShare}
+          onOpenTopic={onOpenTopic}
+          onHoverPreload={onHoverPreload}
+          onNavigateAuthor={onNavigateAuthor}
+        />
+      ))}
+    </div>
+  )
 }
 
 export default function Discover() {
@@ -108,11 +519,10 @@ export default function Discover() {
   const [hasMoreFeed, setHasMoreFeed] = useState(true)
   const [loadingMoreFeed, setLoadingMoreFeed] = useState(false)
   const [newUpdatesCount, setNewUpdatesCount] = useState(0)
-  const FEED_PAGE_SIZE = 12
 
   useEffect(() => {
     document.title = 'Discover — Throughline'
-    fetchDiscoverFeed(null, true, searchQuery)
+    void fetchDiscoverFeed(null, true, searchQuery)
     // Preload chart bundle during browser idle
     if (typeof requestIdleCallback !== 'undefined') {
       requestIdleCallback(preloadConfidenceChart)
@@ -127,14 +537,17 @@ export default function Discover() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'public_posts' },
         () => {
-          invalidateCache('discover_feed_cursor_null')
+          void invalidateCache('discover_feed_cursor_null')
           setNewUpdatesCount(prev => prev + 1)
         }
       )
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (typeof channel?.unsubscribe === 'function') {
+        channel.unsubscribe().catch(() => {})
+      }
+      void supabase.removeChannel(channel)
     }
   }, [])
 
@@ -145,11 +558,19 @@ export default function Discover() {
       isSearchMountedRef.current = true
       return
     }
+    let isActive = true
     const timer = setTimeout(() => {
       setLastCursor(null)
-      fetchDiscoverFeed(null, true, searchQuery)
+      fetchDiscoverFeed(null, true, searchQuery).then(() => {
+        if (!isActive) return
+      }).catch(err => {
+        if (isActive) console.error('Search feed error:', err)
+      })
     }, 300)
-    return () => clearTimeout(timer)
+    return () => {
+      isActive = false
+      clearTimeout(timer)
+    }
   }, [searchQuery])
 
   function triggerToast(msg) {
@@ -173,8 +594,9 @@ export default function Discover() {
   function handleShare(topic) {
     const url = `${window.location.origin}/${topic.profiles?.username}/${topic.slug}`
     const snippet = `"${topic.title}" by @${topic.profiles?.username}: ${url}`
-    navigator.clipboard.writeText(snippet)
-    triggerToast("Link & snippet copied to clipboard!")
+    void navigator.clipboard.writeText(snippet)
+      .then(() => triggerToast("Link & snippet copied to clipboard!"))
+      .catch(() => triggerToast("Failed to copy link"))
   }
 
   function handleOpenTopic(topic) {
@@ -192,114 +614,38 @@ export default function Discover() {
       const cleanQuery = (query || '').trim()
 
       if (isInitial) {
-        const cacheKey = `discover_feed_cursor_${cursor || 'null'}`
-        const syncCached = !cleanQuery ? getSyncCache(cacheKey) : null
-        if (syncCached && Array.isArray(syncCached) && syncCached.length > 0) {
+        const syncCached = tryGetInitialCachedFeed(cursor, cleanQuery)
+        if (syncCached) {
           setTopics(syncCached)
           setLoading(false)
-        } else {
-          setLoading(true)
+          return
         }
+        setLoading(true)
 
-        if (!cleanQuery && !syncCached) {
-          const cached = await getCache(cacheKey)
-          if (cached && Array.isArray(cached) && cached.length > 0) {
-            setTopics(cached)
-            setLoading(false)
-            return
-          }
+        const cached = await checkCachedFeed(cursor, cleanQuery)
+        if (cached) {
+          setTopics(cached)
+          setLoading(false)
+          return
         }
       } else {
         setLoadingMoreFeed(true)
       }
 
-      let req = supabase
-        .from('topics')
-        .select(`
-          id,
-          title,
-          slug,
-          user_id,
-          created_at,
-          profiles (
-            username,
-            display_name,
-            bio,
-            avatar_url
-          ),
-          public_posts!inner (
-            id,
-            content,
-            confidence_rating,
-            entry_date,
-            moderation_status
-          )
-        `)
-        .eq('public_posts.moderation_status', 'approved')
-        .order('created_at', { ascending: false })
-        .order('entry_date', { foreignTable: 'public_posts', ascending: true })
-        .limit(50, { foreignTable: 'public_posts' })
-        .limit(FEED_PAGE_SIZE)
-
-      // Cursor: only fetch topics older than the last seen created_at
-      if (cursor) {
-        req = req.lt('created_at', cursor)
-      }
-
-      const sanitized = cleanQuery.replace(/[^a-zA-Z0-9 _-]/g, '').trim()
-      if (sanitized) {
-        req = req.textSearch('fts', sanitized, { config: 'english', type: 'websearch' })
-      }
-
+      const req = buildDiscoverQuery(cursor, cleanQuery)
       const { data, error } = await req
-
       if (error) throw error
 
-      const filtered = (data || [])
-        .filter(t => t.public_posts && t.public_posts.length > 0)
-        .map(t => {
-          const sortedPosts = [...t.public_posts].sort(
-            (a, b) => new Date(a.entry_date) - new Date(b.entry_date)
-          )
-          const firstConfidence = sortedPosts[0]?.confidence_rating || 50
-          const latestPost = sortedPosts[sortedPosts.length - 1]
-          const latestConfidence = latestPost?.confidence_rating || 50
-          const delta = Math.abs(latestConfidence - firstConfidence)
-          const diff = latestConfidence - firstConfidence
-          
-          // Time decay in days since latest post
-          const lastDate = new Date(latestPost?.entry_date || new Date())
-          const now = new Date()
-          const daysAgo = Math.max(0, (now.getTime() - lastDate.getTime()) / (1000 * 3600 * 24))
-          const decay = 1 / Math.pow(1 + daysAgo, 0.75)
-
-          return {
-            ...t,
-            public_posts: sortedPosts,
-            latestPost,
-            firstConfidence,
-            latestConfidence,
-            delta,
-            diff,
-            daysAgo,
-            span: `${sortedPosts.length} ${sortedPosts.length === 1 ? 'entry' : 'entries'}`
-          }
-        })
-
-      if (isInitial) {
-        setTopics(filtered)
-        if (!cleanQuery) {
-          setCache(`discover_feed_cursor_null`, filtered, 60)
-        }
-      } else {
-        setTopics(prev => [...prev, ...filtered])
-      }
-
-      // Advance cursor to the created_at of the last fetched topic
-      if (data && data.length > 0) {
-        setLastCursor(data[data.length - 1].created_at)
-      }
-      setHasMoreFeed(data && data.length === FEED_PAGE_SIZE)
+      const filtered = processTopicPosts(data)
+      applyFeedResults({
+        isInitial,
+        cleanQuery,
+        filtered,
+        data,
+        setTopics,
+        setLastCursor,
+        setHasMoreFeed
+      })
     } catch (err) {
       console.error('Error fetching discover feed:', err)
     } finally {
@@ -310,15 +656,12 @@ export default function Discover() {
 
   function loadMoreFeed() {
     if (loadingMoreFeed || !hasMoreFeed) return
-    fetchDiscoverFeed(lastCursor, false, searchQuery)
+    void fetchDiscoverFeed(lastCursor, false, searchQuery)
   }
 
   // 1. Filter feed by tab
   const tabFiltered = useMemo(() => {
-    return topics.filter(t => {
-      if (feedTab === "bookmarked" && !bookmarks.includes(t.id)) return false
-      return true
-    })
+    return topics.filter(t => feedTab !== "bookmarked" || bookmarks.includes(t.id))
   }, [topics, feedTab, bookmarks])
 
   // 2. Perform semantic & fuzzy search
@@ -424,7 +767,7 @@ export default function Discover() {
               onClick={() => {
                 setNewUpdatesCount(0)
                 setLastCursor(null)
-                fetchDiscoverFeed(null, true)
+                void fetchDiscoverFeed(null, true)
               }}
               className="tl-focus btn-premium flex items-center justify-center gap-1 animate-fade-in"
               style={{
@@ -445,254 +788,17 @@ export default function Discover() {
           </div>
         )}
 
-        {loading ? (
-          <div style={{ textAlign: "center", padding: "40px 0", color: tokens.inkSoft }} className="tl-mono">
-            Loading public minds...
-          </div>
-        ) : sortedFeed.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "40px 0", color: tokens.inkSoft, background: tokens.card, borderRadius: 10, border: `1px dashed ${tokens.line}` }}>
-            <p className="tl-display" style={{ fontSize: 16, marginBottom: 4 }}>
-              {feedTab === "bookmarked" ? "No bookmarked throughlines yet" : "No throughlines found"}
-            </p>
-            <p style={{ fontSize: 13, color: tokens.inkFaint }}>
-              {feedTab === "bookmarked" ? "Click the bookmark icon on any public throughline to save it here." : "Try adjusting your search terms or check back later."}
-            </p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-6">
-            {sortedFeed.map((topic) => {
-              const isBookmarked = bookmarks.includes(topic.id)
-              const firstConf = topic.firstConfidence ?? topic.latestConfidence ?? 50
-              const latestConf = topic.latestConfidence ?? 50
-              const diff = topic.diff !== undefined ? topic.diff : (latestConf - firstConf)
-              const deltaAbs = Math.abs(diff)
-              const isDrop = diff < 0
-              const isRise = diff > 0
-              
-              // Sparkline & badge colors:
-              // Drop: warm terracotta/ember (#B8532F), bg (#F8EBE5)
-              // Rise: forest pine (#2F4A3D), bg (#EAF3ED)
-              // Flat: calm sage (#56826E), bg (#EEF2EF)
-              const accentColor = isDrop ? "#B8532F" : isRise ? tokens.pine : "#56826E"
-              const badgeBg = isDrop ? "#F8EBE5" : isRise ? tokens.pineSoft : "#EEF2EF"
-              
-              const category = getTopicCategory(topic)
-              const avatarStyle = getAvatarStyle(topic.profiles?.username, topic.profiles?.display_name)
-              const authorInitial = (topic.profiles?.display_name || topic.profiles?.username || 'T').charAt(0).toUpperCase()
-
-              return (
-                <div 
-                  key={topic.id} 
-                  className="tl-entry tl-card-interactive"
-                  onMouseEnter={preloadConfidenceChart}
-                  style={{ 
-                    padding: "24px",
-                    borderRadius: 18,
-                    position: "relative"
-                  }}
-                >
-                  {/* Top Header Row */}
-                  <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => navigate(`/${topic.profiles?.username}`)}
-                        className="tl-focus"
-                        style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
-                        title={`View ${topic.profiles?.display_name || topic.profiles?.username}'s profile`}
-                      >
-                        <div 
-                          style={{
-                            width: 38,
-                            height: 38,
-                            borderRadius: "50%",
-                            background: avatarStyle.bg,
-                            color: avatarStyle.text,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            fontFamily: "var(--font-serif)",
-                            fontSize: 16,
-                            fontWeight: 700,
-                            flexShrink: 0,
-                            boxShadow: "0 1px 3px rgba(0,0,0,0.06)"
-                          }}
-                        >
-                          {authorInitial}
-                        </div>
-                      </button>
-
-                      <div className="flex flex-col" style={{ lineHeight: 1.25 }}>
-                        <button 
-                          onClick={() => navigate(`/${topic.profiles?.username}`)}
-                          className="tl-focus"
-                          style={{ 
-                            fontSize: 14.5, 
-                            color: tokens.ink, 
-                            background: "none", 
-                            border: "none", 
-                            cursor: "pointer", 
-                            fontWeight: 600, 
-                            textAlign: "left",
-                            padding: 0 
-                          }}
-                        >
-                          {topic.profiles?.display_name || topic.profiles?.username}
-                        </button>
-                        <span className="tl-mono" style={{ fontSize: 12, color: tokens.inkFaint }}>
-                          @{topic.profiles?.username || 'anonymous'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2.5">
-                      <span className="tl-mono" style={{ fontSize: 12, color: tokens.inkSoft }}>
-                        {topic.span}
-                      </span>
-                      
-                      <button
-                        onClick={() => toggleBookmark(topic.id)}
-                        className="tl-focus btn-premium flex items-center justify-center"
-                        title={isBookmarked ? "Remove bookmark" : "Save bookmark"}
-                        style={{ border: "none", background: "transparent", cursor: "pointer", color: isBookmarked ? tokens.pine : tokens.inkSoft, padding: 3 }}
-                      >
-                        <Bookmark size={16} fill={isBookmarked ? tokens.pine : "none"} strokeWidth={1.8} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Category Pill Tag */}
-                  <div style={{ marginBottom: 12 }}>
-                    <span 
-                      style={{
-                        display: "inline-block",
-                        padding: "3px 10px",
-                        borderRadius: 999,
-                        fontSize: 11.5,
-                        fontWeight: 600,
-                        background: category.theme === 'sand' ? "#F3ECE2" : category.theme === 'lavender' ? "#EBE8F4" : tokens.pineSoft,
-                        color: category.theme === 'sand' ? "#745437" : category.theme === 'lavender' ? "#4A3F68" : tokens.pine,
-                      }}
-                    >
-                      {category.name}
-                    </span>
-                  </div>
-                  
-                  {/* Topic Title (Headline) */}
-                  <h3 
-                    className="tl-display" 
-                    style={{ 
-                      fontSize: 21, 
-                      fontWeight: 700, 
-                      margin: "0 0 12px", 
-                      cursor: "pointer", 
-                      color: tokens.ink,
-                      lineHeight: 1.3
-                    }}
-                    onClick={() => handleOpenTopic(topic)}
-                  >
-                    {topic.title}
-                  </h3>
-                  
-                  {/* Content Excerpt */}
-                  <p style={{ fontSize: 14.5, lineHeight: 1.6, color: tokens.inkSoft, margin: "0 0 18px" }}>
-                    {topic.latestPost?.content}
-                  </p>
-                  
-                  {/* Divider Line */}
-                  <div style={{ height: 1, background: tokens.line, marginBottom: 16 }} />
-
-                  {/* Footer Row: Metrics & Actions */}
-                  <div className="flex items-center justify-between flex-wrap gap-3">
-                    <div className="flex items-center gap-3">
-                      {/* Big Conviction Stat */}
-                      <div className="flex flex-col" style={{ lineHeight: 1 }}>
-                        <span 
-                          style={{ 
-                            fontSize: 32, 
-                            fontWeight: 700, 
-                            fontFamily: "var(--font-serif)",
-                            color: tokens.ink, 
-                            letterSpacing: "-0.02em" 
-                          }}
-                        >
-                          {latestConf}%
-                        </span>
-                        <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint, marginTop: 4 }}>
-                          conviction
-                        </span>
-                      </div>
-
-                      {/* Delta Badge */}
-                      {deltaAbs > 0 && (
-                        <span 
-                          className="tl-mono flex items-center gap-1"
-                          style={{ 
-                            fontSize: 12, 
-                            fontWeight: 600, 
-                            background: badgeBg, 
-                            color: accentColor, 
-                            padding: "3px 8px", 
-                            borderRadius: 999 
-                          }}
-                        >
-                          {isDrop ? "↓" : "↑"} {deltaAbs}%
-                        </span>
-                      )}
-
-                      {/* Sparkline Curve */}
-                      <div style={{ marginLeft: 4 }}>
-                        <MiniSparkline 
-                          data={topic.public_posts} 
-                          width={130} 
-                          height={30} 
-                          color={accentColor}
-                          strokeWidth={2.2}
-                          nodeRadius={3.5}
-                          showFill={false}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => handleShare(topic)}
-                        className="tl-focus btn-premium"
-                        style={{ 
-                          border: "none", 
-                          background: "none", 
-                          cursor: "pointer", 
-                          color: tokens.inkSoft, 
-                          fontSize: 13, 
-                          fontWeight: 500, 
-                          padding: "6px 8px" 
-                        }}
-                      >
-                        Share
-                      </button>
-
-                      <button 
-                        onClick={() => handleOpenTopic(topic)} 
-                        className="tl-focus btn-premium" 
-                        style={{ 
-                          border: "none", 
-                          background: tokens.pineSoft, 
-                          color: tokens.pine,
-                          borderRadius: 8,
-                          padding: "8px 16px",
-                          cursor: "pointer", 
-                          fontSize: 13, 
-                          fontWeight: 600, 
-                        }}
-                      >
-                        Read throughline
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
+        <DiscoverFeedContent
+          loading={loading}
+          sortedFeed={sortedFeed}
+          feedTab={feedTab}
+          bookmarks={bookmarks}
+          onToggleBookmark={toggleBookmark}
+          onShare={handleShare}
+          onOpenTopic={handleOpenTopic}
+          onHoverPreload={preloadConfidenceChart}
+          onNavigateAuthor={(username) => navigate(`/${username}`)}
+        />
 
         {/* Feed Pagination Load More */}
         {hasMoreFeed && topics.length > 0 && (

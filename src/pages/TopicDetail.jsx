@@ -146,6 +146,7 @@ export default function TopicDetail() {
       }
     }
 
+    let isMounted = true
     if (user && topic?.id) {
       supabase
         .from('nudges')
@@ -154,8 +155,14 @@ export default function TopicDetail() {
         .eq('nudger_id', user.id)
         .maybeSingle()
         .then(({ data }) => {
-          if (data) setHasNudged(true)
+          if (isMounted && data) setHasNudged(true)
         })
+        .catch(err => {
+          console.warn('[TopicDetail Nudge Query Error]:', err)
+        })
+    }
+    return () => {
+      isMounted = false
     }
   }, [topic?.id, user])
 
@@ -264,7 +271,7 @@ export default function TopicDetail() {
             }}
             title={`View ${profile?.display_name || username}'s full profile`}
           >
-            {profile?.avatar_url ? (
+            {profile?.avatar_url && /^https?:\/\//i.test(profile.avatar_url) ? (
               <img
                 src={profile.avatar_url}
                 alt={profile.display_name || username}

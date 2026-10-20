@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     username TEXT UNIQUE NOT NULL CHECK (char_length(username) >= 3 AND char_length(username) <= 30),
     display_name TEXT CHECK (char_length(display_name) <= 100),
     bio TEXT CHECK (char_length(bio) <= 500),
-    avatar_url TEXT,
+    avatar_url TEXT CHECK (avatar_url IS NULL OR (char_length(avatar_url) <= 2048 AND avatar_url ~* '^https?://[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(/.*)?$')),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -430,7 +430,13 @@ CREATE POLICY "Users can view own private entries" ON public.private_entries
     FOR SELECT USING ((select auth.uid()) = user_id);
 
 CREATE POLICY "Users can insert own private entries" ON public.private_entries
-    FOR INSERT WITH CHECK ((select auth.uid()) = user_id);
+    FOR INSERT WITH CHECK (
+        (select auth.uid()) = user_id
+        AND EXISTS (
+            SELECT 1 FROM public.topics
+            WHERE topics.id = topic_id AND topics.user_id = (select auth.uid())
+        )
+    );
 
 CREATE POLICY "Users can update own private entries" ON public.private_entries
     FOR UPDATE USING ((select auth.uid()) = user_id)
@@ -458,7 +464,17 @@ CREATE POLICY "Public posts viewable if approved or by owner" ON public.public_p
     );
 
 CREATE POLICY "Users can insert own public posts" ON public.public_posts
-    FOR INSERT WITH CHECK ((select auth.uid()) = user_id);
+    FOR INSERT WITH CHECK (
+        (select auth.uid()) = user_id
+        AND EXISTS (
+            SELECT 1 FROM public.topics
+            WHERE topics.id = topic_id AND topics.user_id = (select auth.uid())
+        )
+        AND EXISTS (
+            SELECT 1 FROM public.private_entries
+            WHERE private_entries.id = private_entry_id AND private_entries.user_id = (select auth.uid())
+        )
+    );
 
 CREATE POLICY "Users can update own public posts" ON public.public_posts
     FOR UPDATE USING ((select auth.uid()) = user_id)

@@ -16,9 +16,20 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 // @ts-ignore: Deno URL module imports resolved at runtime by Supabase Edge Runtime
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+const rawOrigin = Deno.env.get('APP_ORIGIN') || ''
+const envOrigins = rawOrigin.split(',').map(s => s.trim()).filter(Boolean)
+const ALLOWED_ORIGINS = envOrigins.length > 0
+  ? envOrigins
+  : ['http://localhost:3000', 'http://localhost:5173', 'http://localhost:4173']
+
+function getCorsHeaders(origin: string) {
+  const isAllowed = ALLOWED_ORIGINS.some(allowed => allowed === origin || allowed === '*')
+  const allowedHeader = isAllowed ? origin : ALLOWED_ORIGINS[0]
+  return {
+    'Access-Control-Allow-Origin': allowedHeader,
+    'Vary': 'Origin',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-webhook-secret',
+  }
 }
 
 // Zero-width & invisible character matcher
@@ -277,14 +288,98 @@ async function syncModerationToDatabase(
   }
 }
 
+async function authenticateCaller(
+  req: Request, 
+  corsHeaders: Record<string, string>
+): Promise<{ errorResponse?: Response; authenticatedUserId: string | null; isWebhookAuthorized: boolean }> {
+  const webhookSecret = req.headers.get('x-webhook-secret')
+  const expectedSecret = Deno.env.get('MODERATION_WEBHOOK_SECRET')
+  const isWebhookAuthorized = Boolean(expectedSecret && webhookSecret === expectedSecret)
+
+  if (isWebhookAuthorized) {
+    return { isWebhookAuthorized: true, authenticatedUserId: null }
+  }
+
+  const authHeader = req.headers.get('Authorization')
+  if (!authHeader?.startsWith('Bearer ')) {
+    return {
+      errorResponse: new Response(JSON.stringify({ error: 'Unauthorized: missing authorization credentials' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }),
+      authenticatedUserId: null,
+      isWebhookAuthorized: false
+    }
+  }
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') || ''
+  const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: authHeader } }
+  })
+  const { data: { user }, error: authErr } = await supabaseAuth.auth.getUser()
+  if (authErr || !user) {
+    return {
+      errorResponse: new Response(JSON.stringify({ error: 'Unauthorized: invalid or expired session' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }),
+      authenticatedUserId: null,
+      isWebhookAuthorized: false
+    }
+  }
+
+  return { isWebhookAuthorized: false, authenticatedUserId: user.id }
+}
+
+async function verifyPostOwnership(
+  postId: string, 
+  userId: string, 
+  corsHeaders: Record<string, string>
+): Promise<Response | null> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || ''
+  const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+  if (!supabaseUrl || !supabaseServiceKey) return null
+
+  const adminClient = createClient(supabaseUrl, supabaseServiceKey)
+  const { data: postRecord, error: postErr } = await adminClient
+    .from('public_posts')
+    .select('user_id')
+    .eq('id', postId)
+    .maybeSingle()
+
+  if (postErr || !postRecord) {
+    return new Response(JSON.stringify({ error: 'Post not found' }), {
+      status: 404,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    })
+  }
+
+  if (postRecord.user_id !== userId) {
+    return new Response(JSON.stringify({ error: 'Forbidden: Cannot moderate another user post' }), {
+      status: 403,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    })
+  }
+
+  return null
+}
+
 serve(async (req: Request): Promise<Response> => {
+  const origin = req.headers.get('Origin') || ''
+  const corsHeaders = getCorsHeaders(origin)
+
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  const authResult = await authenticateCaller(req, corsHeaders)
+  if (authResult.errorResponse) {
+    return authResult.errorResponse
+  }
+
   try {
     const body = await req.json()
-    // Support both direct invocation { postId, content } and Database Webhook { record: { id, content } }
     const postId = body.postId || body.record?.id
     const content = body.content || body.record?.content
 
@@ -293,6 +388,11 @@ serve(async (req: Request): Promise<Response> => {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
+    }
+
+    if (postId && !authResult.isWebhookAuthorized && authResult.authenticatedUserId) {
+      const ownershipError = await verifyPostOwnership(postId, authResult.authenticatedUserId, corsHeaders)
+      if (ownershipError) return ownershipError
     }
 
     const evaluation = await runModerationPipeline(String(content))

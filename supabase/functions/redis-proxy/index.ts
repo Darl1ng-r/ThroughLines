@@ -90,17 +90,16 @@ serve(async (req: Request): Promise<Response> => {
     const sanitizedKey = key.replace(/[^a-zA-Z0-9_:.-]/g, '_').slice(0, 100)
     const safeKey = `tl:u:${user.id}:${sanitizedKey}`
 
-    let upstreamUrl = ''
-    let reqMethod = 'GET'
+    let commandArgs: (string | number)[] = []
 
     if (action === 'get') {
-      upstreamUrl = `${UPSTASH_URL}/get/${encodeURIComponent(safeKey)}`
+      commandArgs = ['GET', safeKey]
     } else if (action === 'set') {
       const serialized = typeof value === 'string' ? value : JSON.stringify(value)
       const safeTtl = Math.min(Math.max(1, Number(ttl) || 60), 86400) // max 24h
-      upstreamUrl = `${UPSTASH_URL}/set/${encodeURIComponent(safeKey)}/${encodeURIComponent(serialized)}/EX/${safeTtl}`
+      commandArgs = ['SET', safeKey, serialized, 'EX', safeTtl]
     } else if (action === 'del') {
-      upstreamUrl = `${UPSTASH_URL}/del/${encodeURIComponent(safeKey)}`
+      commandArgs = ['DEL', safeKey]
     } else {
       return new Response(JSON.stringify({ error: 'Invalid action. Allowed: get, set, del.' }), {
         status: 400,
@@ -108,11 +107,13 @@ serve(async (req: Request): Promise<Response> => {
       })
     }
 
-    const upstreamRes = await fetch(upstreamUrl, {
-      method: reqMethod,
+    const upstreamRes = await fetch(UPSTASH_URL, {
+      method: 'POST',
       headers: {
-        Authorization: `Bearer ${UPSTASH_TOKEN}`
+        Authorization: `Bearer ${UPSTASH_TOKEN}`,
+        'Content-Type': 'application/json'
       },
+      body: JSON.stringify(commandArgs),
       signal: AbortSignal.timeout(4000)
     })
 

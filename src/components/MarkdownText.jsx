@@ -8,20 +8,28 @@ const tokens = {
   line: "var(--color-line)",
 }
 
-const INLINE_REGEX = /(`[^`\n]+`|\*\*[^*\n]+\*\*|\*[^*\n]+\*|\[[^\]\n]+\]\([^)\s]+\))/g
-const LINK_INNER_REGEX = /\[([^\]]+)\]\(([^)]+)\)/
+const INLINE_REGEX = /(`[^`\r\n]+`|\*{1,2}[^\r\n*]+\*{1,2}|\[[^\r\n\]]+\]\([^)\s]+\))/g
+const LINK_INNER_REGEX = /^\[([^\]]+)\]\(([^)\s]+)\)$/
 
 function sanitizeUrl(url) {
   if (!url || typeof url !== 'string') return '#'
-  const trimmed = url.trim()
-  // Strictly block protocol-relative URLs (e.g. //evil.com or /\evil.com)
-  if (trimmed.startsWith('//') || trimmed.startsWith('/\\')) return '#'
+  // Strip control, zero-width, and non-printable characters
+  const cleaned = url.replace(/[\u0000-\u001F\u007F-\u009F\u200B-\u200D\uFEFF\u2060]/g, '').trim()
+  if (cleaned.startsWith('//') || cleaned.startsWith('/\\')) return '#'
+  
+  // Guard against obscured script protocols
+  const lower = cleaned.toLowerCase()
+  if (lower.includes('javascript:') || lower.includes('data:') || lower.includes('vbscript:')) {
+    return '#'
+  }
+
   // Allow relative paths and hash anchors
-  if (trimmed.startsWith('/') || trimmed.startsWith('#')) return trimmed
+  if (cleaned.startsWith('/') || cleaned.startsWith('#')) return cleaned
+
   try {
-    const parsed = new URL(trimmed)
+    const parsed = new URL(cleaned)
     if (['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
-      return trimmed
+      return cleaned
     }
   } catch {
     // Gracefully fallback to safe anchor on invalid or malformed URL formats

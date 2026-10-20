@@ -4,7 +4,6 @@ import { supabase } from '../services/supabaseClient'
 // Lazy-load Recharts chart — defers the 383KB vendor-charts chunk until chart is visible
 const ConfidenceChart = lazy(() => import('../components/ConfidenceChart'))
 import ErrorBoundary from '../components/ErrorBoundary'
-import MarkdownText from '../components/MarkdownText'
 import TopicSidebar from '../components/dashboard/TopicSidebar'
 import EntryComposer from '../components/dashboard/EntryComposer'
 import TimelineItem from '../components/dashboard/TimelineItem'
@@ -15,20 +14,13 @@ import { moderateContent } from '../services/contentModerationService'
 import { 
   Lock, 
   Globe, 
-  Plus, 
-  PenLine, 
   X, 
-  Send, 
-  Eye,
-  CheckCircle,
-  Clock,
   AlertCircle,
   Search,
   Filter,
   Download,
   Printer,
   Share2,
-  Sparkles,
   ChevronDown
 } from 'lucide-react'
 
@@ -51,15 +43,17 @@ const tokens = {
 
 function Meter({ value }) {
   return (
-    <div 
-      className="flex items-center gap-2"
-      role="meter"
-      aria-label="Conviction level"
-      aria-valuenow={value}
-      aria-valuemin={0}
-      aria-valuemax={100}
-    >
-      <div style={{ width: 46, height: 4, borderRadius: 2, background: tokens.line, overflow: "hidden" }}>
+    <div className="flex items-center gap-2">
+      <meter
+        min={0}
+        max={100}
+        value={value}
+        aria-label="Conviction level"
+        className="sr-only"
+      >
+        {value}%
+      </meter>
+      <div aria-hidden="true" style={{ width: 46, height: 4, borderRadius: 2, background: tokens.line, overflow: "hidden" }}>
         <div style={{ width: `${value}%`, height: "100%", background: tokens.pine }} />
       </div>
       <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkSoft }}>{value}% sure</span>
@@ -79,7 +73,7 @@ function VisibilityStatus({ visibility, status }) {
     return (
       <span className="tl-mono flex items-center gap-1" style={{ fontSize: 11, letterSpacing: "0.04em", color: tokens.ember, textTransform: "uppercase" }}>
         <span className="tl-pulse-dot" style={{ width: 6, height: 6, borderRadius: "50%", background: tokens.ember, display: "inline-block" }} />
-        Reviewing
+        {' '}Reviewing
       </span>
     )
   }
@@ -95,6 +89,135 @@ function VisibilityStatus({ visibility, status }) {
       <Globe size={11} /> Public
     </span>
   )
+}
+
+function formatEntryCount(count) {
+  if (count === 0) return "No entries logged yet"
+  return `${count} ${count === 1 ? "entry" : "entries"}`
+}
+
+async function persistEntryRecord({ selectedTopic, text, confRating, isPublic, composeShiftReason, user }) {
+  const entryDate = new Date().toISOString()
+  
+  // Attempt atomic database transaction via RPC
+  const { data: rpcData, error: rpcErr } = await supabase.rpc('create_entry_transaction', {
+    p_topic_id: selectedTopic.id,
+    p_content: text,
+    p_confidence: confRating,
+    p_is_public: isPublic,
+    p_entry_date: entryDate,
+    p_shift_reason: composeShiftReason
+  })
+
+  if (!rpcErr && rpcData?.entryId) {
+    const entry = {
+      id: rpcData.entryId,
+      topic_id: selectedTopic.id,
+      user_id: user.id,
+      content: text,
+      confidence_rating: confRating,
+      shift_reason: composeShiftReason,
+      entry_date: entryDate
+    }
+    const publicPostObj = (isPublic && rpcData.publicPostId) ? {
+      id: rpcData.publicPostId,
+      private_entry_id: rpcData.entryId,
+      topic_id: selectedTopic.id,
+      user_id: user.id,
+      content: text,
+      confidence_rating: confRating,
+      shift_reason: composeShiftReason,
+      moderation_status: rpcData.moderationStatus || 'approved',
+      entry_date: entryDate
+    } : null
+
+    return { entry, publicPostObj }
+  }
+
+  // Fallback to sequential inserts if RPC is not available in mock/local environment
+  const { data: newEntryData, error: entryErr } = await supabase
+    .from('private_entries')
+    .insert({
+      topic_id: selectedTopic.id,
+      user_id: user.id,
+      content: text,
+      confidence_rating: confRating,
+      shift_reason: composeShiftReason,
+      entry_date: entryDate
+    })
+    .select()
+
+  if (entryErr) throw entryErr
+  const entry = newEntryData[0]
+  let publicPostObj = null
+
+  if (isPublic) {
+    const { data: pubData, error: pubErr } = await supabase
+      .from('public_posts')
+      .insert({
+        private_entry_id: entry.id,
+        topic_id: selectedTopic.id,
+        user_id: user.id,
+        content: text,
+        confidence_rating: confRating,
+        shift_reason: composeShiftReason,
+        entry_date: entryDate
+      })
+      .select()
+
+    if (pubErr) throw pubErr
+    publicPostObj = pubData[0]
+  }
+
+  // Clear nudges
+  await supabase.from('nudges').delete().eq('topic_id', selectedTopic.id)
+
+  return { entry, publicPostObj }
+}
+
+async function handleIncomingNudge(newNudge, setNudges) {
+  if (!newNudge.nudger_id) {
+    setNudges(prev => [...prev.filter(n => n.id !== newNudge.id), newNudge])
+    return
+  }
+  try {
+    const { data: profileData } = await supabase
+      .from('profiles')
+      .select('id, username, display_name, avatar_url')
+      .eq('id', newNudge.nudger_id)
+      .maybeSingle()
+    const enriched = { ...newNudge, nudger: profileData || null }
+    setNudges(prev => [...prev.filter(n => n.id !== newNudge.id), enriched])
+  } catch (err) {
+    console.warn('[Dashboard Nudge Profile Lookup Error]:', err)
+    setNudges(prev => [...prev.filter(n => n.id !== newNudge.id), newNudge])
+  }
+}
+
+function TimelineContent({ loadingEntries, filteredEntries, totalEntries, selectedTopicNudges, selectedEntryId, publishEntry, unpublishEntry, updateEntry }) {
+  if (loadingEntries) {
+    return <div className="tl-mono" style={{ fontSize: 12, color: tokens.inkSoft, paddingLeft: 24 }}>Loading timeline...</div>
+  }
+  if (filteredEntries.length === 0) {
+    const emptyMsg = totalEntries === 0 ? "No entries logged yet." : "No entries match your search/filter."
+    return (
+      <div className="tl-mono" style={{ fontSize: 12, color: tokens.inkFaint, paddingLeft: 24, fontStyle: 'italic' }}>
+        {emptyMsg}
+      </div>
+    )
+  }
+  return filteredEntries.map((entry, index) => (
+    <TimelineItem 
+      key={entry.id}
+      entry={entry}
+      isLatest={index === filteredEntries.length - 1}
+      nudges={selectedTopicNudges}
+      isSelected={selectedEntryId === entry.id}
+      onPublish={publishEntry}
+      onUnpublish={unpublishEntry}
+      onUpdate={updateEntry}
+    />
+  ))
 }
 
 export default function Dashboard() {
@@ -178,18 +301,25 @@ export default function Dashboard() {
   useEffect(() => {
     document.title = 'Dashboard — Throughline'
     if (user) {
-      fetchTopics()
+      void fetchTopics()
     }
   }, [user])
 
 
+  const topicsRef = useRef(topics)
+  useEffect(() => {
+    topicsRef.current = topics
+  }, [topics])
+
   useEffect(() => {
     if (selectedId) {
       setPage(0)
-      fetchEntries(selectedId, 0, true)
+      void fetchEntries(selectedId, 0, true)
       // Load cached draft asynchronously from IndexedDB
-      getDraft(`draft_${selectedId}`).then(cached => {
+      void getDraft(`draft_${selectedId}`).then(cached => {
         setComposeText(cached || "")
+      }).catch(err => {
+        console.warn('[Dashboard Draft Load Error]:', err)
       })
     } else {
       setEntries([])
@@ -201,7 +331,7 @@ export default function Dashboard() {
     if (!user) return
 
     // Prompt for browser notification permission
-    requestNotificationPermission()
+    void requestNotificationPermission()
 
     const channel = supabase
       .channel(`dashboard_nudges_ws_${user.id}`)
@@ -210,38 +340,27 @@ export default function Dashboard() {
         { event: 'INSERT', schema: 'public', table: 'nudges' },
         (payload) => {
           const newNudge = payload.new
-          if (newNudge && newNudge.topic_id) {
-            setTopics(currentTopics => {
-              const ownsTopic = currentTopics.some(t => t.id === newNudge.topic_id)
-              if (ownsTopic) {
-                if (newNudge.nudger_id) {
-                  supabase
-                    .from('profiles')
-                    .select('id, username, display_name, avatar_url')
-                    .eq('id', newNudge.nudger_id)
-                    .maybeSingle()
-                    .then(({ data: profileData }) => {
-                      const enriched = { ...newNudge, nudger: profileData }
-                      setNudges(prev => [...prev.filter(n => n.id !== newNudge.id), enriched])
-                    })
-                } else {
-                  setNudges(prev => [...prev.filter(n => n.id !== newNudge.id), newNudge])
-                }
-                triggerToast("🔔 Someone just nudged you for an update!")
-                sendNativeNotification("🌿 New Throughline Nudge!", {
-                  body: "Someone requested an update on your throughline!",
-                  url: "/dashboard"
-                })
-              }
-              return currentTopics
-            })
+          if (newNudge?.topic_id) {
+            const ownsTopic = topicsRef.current.some(t => t.id === newNudge.topic_id)
+            if (ownsTopic) {
+              triggerToast("🔔 Someone just nudged you for an update!")
+              void sendNativeNotification("🌿 New Throughline Nudge!", {
+                body: "Someone requested an update on your throughline!",
+                url: "/dashboard"
+              })
+
+              void handleIncomingNudge(newNudge, setNudges)
+            }
           }
         }
       )
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      if (typeof channel?.unsubscribe === 'function') {
+        channel.unsubscribe().catch(() => {})
+      }
+      void supabase.removeChannel(channel)
     }
   }, [user])
 
@@ -250,9 +369,9 @@ export default function Dashboard() {
     setComposeText(text)
     if (selectedId) {
       if (text.trim() === "") {
-        removeDraft(`draft_${selectedId}`)
+        void removeDraft(`draft_${selectedId}`)
       } else {
-        saveDraft(`draft_${selectedId}`, text)
+        void saveDraft(`draft_${selectedId}`, text)
       }
     }
   }, [selectedId])
@@ -339,7 +458,7 @@ export default function Dashboard() {
       const from = pageNum * PAGE_SIZE
       const to = from + PAGE_SIZE - 1
 
-      const { data, error, count } = await supabase
+      const { data, error } = await supabase
         .from('private_entries')
         .select(`
           *,
@@ -347,7 +466,7 @@ export default function Dashboard() {
             id,
             moderation_status
           )
-        `, { count: 'exact' })
+        `)
         .eq('topic_id', topicId)
         .order('entry_date', { ascending: true })
         .range(from, to)
@@ -374,7 +493,7 @@ export default function Dashboard() {
     if (loadingMore || !hasMoreEntries || !selectedId) return
     const nextPage = page + 1
     setPage(nextPage)
-    fetchEntries(selectedId, nextPage, false)
+    void fetchEntries(selectedId, nextPage, false)
   }
 
   async function createTopic() {
@@ -479,83 +598,16 @@ export default function Dashboard() {
 
     try {
       setSubmitting(true)
-      const entryDate = new Date().toISOString()
       const confRating = Number(composeConfidence)
 
-      let entry = null
-      let publicPostObj = null
-
-      // Attempt atomic database transaction via RPC
-      const { data: rpcData, error: rpcErr } = await supabase.rpc('create_entry_transaction', {
-        p_topic_id: selectedTopic.id,
-        p_content: text,
-        p_confidence: confRating,
-        p_is_public: isPublic,
-        p_entry_date: entryDate,
-        p_shift_reason: composeShiftReason
+      const { entry, publicPostObj } = await persistEntryRecord({
+        selectedTopic,
+        text,
+        confRating,
+        isPublic,
+        composeShiftReason,
+        user
       })
-
-      if (!rpcErr && rpcData && rpcData.entryId) {
-        entry = {
-          id: rpcData.entryId,
-          topic_id: selectedTopic.id,
-          user_id: user.id,
-          content: text,
-          confidence_rating: confRating,
-          shift_reason: composeShiftReason,
-          entry_date: entryDate
-        }
-        if (isPublic && rpcData.publicPostId) {
-          publicPostObj = {
-            id: rpcData.publicPostId,
-            private_entry_id: rpcData.entryId,
-            topic_id: selectedTopic.id,
-            user_id: user.id,
-            content: text,
-            confidence_rating: confRating,
-            shift_reason: composeShiftReason,
-            moderation_status: rpcData.moderationStatus || 'approved',
-            entry_date: entryDate
-          }
-        }
-      } else {
-        // Fallback to sequential inserts if RPC is not available in mock/local environment
-        const { data: newEntryData, error: entryErr } = await supabase
-          .from('private_entries')
-          .insert({
-            topic_id: selectedTopic.id,
-            user_id: user.id,
-            content: text,
-            confidence_rating: confRating,
-            shift_reason: composeShiftReason,
-            entry_date: entryDate
-          })
-          .select()
-
-        if (entryErr) throw entryErr
-        entry = newEntryData[0]
-
-        if (isPublic) {
-          const { data: pubData, error: pubErr } = await supabase
-            .from('public_posts')
-            .insert({
-              private_entry_id: entry.id,
-              topic_id: selectedTopic.id,
-              user_id: user.id,
-              content: text,
-              confidence_rating: confRating,
-              shift_reason: composeShiftReason,
-              entry_date: entryDate
-            })
-            .select()
-
-          if (pubErr) throw pubErr
-          publicPostObj = pubData[0]
-        }
-
-        // Clear nudges
-        await supabase.from('nudges').delete().eq('topic_id', selectedTopic.id)
-      }
 
       // Add to state
       const mappedEntry = {
@@ -565,7 +617,7 @@ export default function Dashboard() {
       setEntries(prev => [...prev, mappedEntry])
 
       // Asynchronously publish to Event Bus (Kafka / RabbitMQ stream)
-      publishEvent(EVENTS.ENTRY_CREATED, {
+      void publishEvent(EVENTS.ENTRY_CREATED, {
         entryId: entry.id,
         topicId: selectedTopic.id,
         topicTitle: selectedTopic.title,
@@ -573,7 +625,7 @@ export default function Dashboard() {
       })
 
       if (publicPostObj) {
-        publishEvent(EVENTS.PUBLIC_POST_PUBLISHED, {
+        void publishEvent(EVENTS.PUBLIC_POST_PUBLISHED, {
           postId: publicPostObj.id,
           topicId: selectedTopic.id,
           content: text
@@ -592,9 +644,9 @@ export default function Dashboard() {
       setComposeText("")
       setComposeConfidence(50)
       setComposeShiftReason(null)
-      removeDraft(`draft_${selectedTopic.id}`)
+      void removeDraft(`draft_${selectedTopic.id}`)
       
-      triggerToast(composeVisibility === 'public' ? "Entry added and published!" : "Entry logged privately.")
+      triggerToast(isPublic ? "Entry added and published!" : "Entry logged privately.")
     } catch (err) {
       console.error('Error adding entry:', err)
       triggerToast("Error saving entry.")
@@ -625,8 +677,9 @@ export default function Dashboard() {
 
       if (error) throw error
 
+      const pubPost = data?.[0]
       setEntries(prev => prev.map(e => 
-        e.id === entry.id ? { ...e, public_posts: [data[0]] } : e
+        e.id === entry.id ? { ...e, public_posts: pubPost ? [pubPost] : [] } : e
       ))
       triggerToast("Entry published.")
     } catch (err) {
@@ -670,7 +723,7 @@ export default function Dashboard() {
       const targetEntry = entries.find(e => e.id === entryId)
       let updatedPubPosts = []
 
-      if (targetEntry && targetEntry.public_posts && targetEntry.public_posts.length > 0) {
+      if (targetEntry?.public_posts?.length > 0) {
         const contentMod = moderateContent(updatedContent)
         if (!contentMod.isValid) {
           triggerToast(`Updated public entry contains flagged language: ${contentMod.category}`)
@@ -689,9 +742,9 @@ export default function Dashboard() {
           .select()
 
         if (pubErr) throw pubErr
-        if (pubData && pubData[0]) {
+        if (pubData?.[0]) {
           updatedPubPosts = [pubData[0]]
-          publishEvent(EVENTS.PUBLIC_POST_PUBLISHED, {
+          void publishEvent(EVENTS.PUBLIC_POST_PUBLISHED, {
             postId: publicPostId,
             topicId: selectedTopic.id,
             content: updatedContent
@@ -705,7 +758,7 @@ export default function Dashboard() {
             ...e,
             content: updatedContent,
             confidence_rating: updatedConfidence,
-            public_posts: e.public_posts && e.public_posts.length > 0 ? updatedPubPosts : []
+            public_posts: e.public_posts?.length > 0 ? updatedPubPosts : []
           }
         }
         return e
@@ -804,9 +857,7 @@ export default function Dashboard() {
                   {selectedTopic.title}
                 </h1>
                 <p className="tl-mono" style={{ fontSize: 12, color: tokens.inkFaint, margin: 0 }}>
-                  {entries.length === 0 
-                    ? "No entries logged yet" 
-                    : `${entries.length} ${entries.length === 1 ? "entry" : "entries"}`}
+                  {formatEntryCount(entries.length)}
                 </p>
               </div>
 
@@ -950,26 +1001,16 @@ export default function Dashboard() {
               />
               
               <div className="flex flex-col gap-6">
-                {loadingEntries ? (
-                  <div className="tl-mono" style={{ fontSize: 12, color: tokens.inkSoft, paddingLeft: 24 }}>Loading timeline...</div>
-                ) : filteredEntries.length === 0 ? (
-                  <div className="tl-mono" style={{ fontSize: 12, color: tokens.inkFaint, paddingLeft: 24, fontStyle: 'italic' }}>
-                    {entries.length === 0 ? "No entries logged yet." : "No entries match your search/filter."}
-                  </div>
-                ) : (
-                  filteredEntries.map((entry, index) => (
-                    <TimelineItem 
-                      key={entry.id}
-                      entry={entry}
-                      isLatest={index === filteredEntries.length - 1}
-                      nudges={selectedTopicNudges}
-                      isSelected={selectedEntryId === entry.id}
-                      onPublish={publishEntry}
-                      onUnpublish={unpublishEntry}
-                      onUpdate={updateEntry}
-                    />
-                  ))
-                )}
+                <TimelineContent 
+                  loadingEntries={loadingEntries}
+                  filteredEntries={filteredEntries}
+                  totalEntries={entries.length}
+                  selectedTopicNudges={selectedTopicNudges}
+                  selectedEntryId={selectedEntryId}
+                  publishEntry={publishEntry}
+                  unpublishEntry={unpublishEntry}
+                  updateEntry={updateEntry}
+                />
 
                 {/* Pagination Load More */}
                 {hasMoreEntries && entries.length > 0 && (
@@ -1019,9 +1060,17 @@ export default function Dashboard() {
 
       {/* Share Card Modal */}
       {showShareModal && selectedTopic && (
-        <div className="tl-modal-overlay" style={{ zIndex: 9999 }} onClick={() => setShowShareModal(false)}>
-          <div 
-            onClick={(e) => e.stopPropagation()} 
+        <div className="tl-modal-overlay" style={{ zIndex: 9999 }}>
+          <button 
+            type="button" 
+            aria-label="Close modal backdrop"
+            tabIndex={-1}
+            onClick={() => setShowShareModal(false)} 
+            style={{ position: "fixed", inset: 0, width: "100%", height: "100%", background: "transparent", border: "none", cursor: "default" }}
+          />
+          <dialog 
+            open
+            aria-label="Shareable Throughline Card"
             style={{ 
               background: tokens.card, 
               border: `1px solid ${tokens.line}`, 
@@ -1031,7 +1080,8 @@ export default function Dashboard() {
               width: "100%", 
               boxShadow: "0 12px 32px rgba(0,0,0,0.18)",
               position: "relative",
-              zIndex: 10000
+              zIndex: 10000,
+              display: "block"
             }}
           >
             <div className="flex items-center justify-between" style={{ marginBottom: 16 }}>
@@ -1039,7 +1089,10 @@ export default function Dashboard() {
                 🌿 Shareable Throughline Card
               </span>
               <button 
+                type="button"
                 onClick={() => setShowShareModal(false)}
+                className="tl-focus"
+                aria-label="Close modal"
                 style={{ border: "none", background: "transparent", cursor: "pointer", color: tokens.inkFaint }}
               >
                 <X size={16} />
@@ -1057,12 +1110,12 @@ export default function Dashboard() {
               </h2>
               {entries.length > 0 && (
                 <p style={{ fontSize: 13.5, lineHeight: 1.5, color: tokens.inkSoft, margin: "0 0 14px", fontStyle: "italic" }}>
-                  "{entries[entries.length - 1].content}"
+                  "{entries.at(-1)?.content}"
                 </p>
               )}
               <div className="flex items-center justify-between">
                 <span className="tl-mono" style={{ fontSize: 11, color: tokens.inkFaint }}>
-                  Latest confidence: <strong style={{ color: tokens.pine }}>{entries.length > 0 ? entries[entries.length - 1].confidence_rating : 50}%</strong>
+                  Latest confidence: <strong style={{ color: tokens.pine }}>{entries.length > 0 ? (entries.at(-1)?.confidence_rating ?? 50) : 50}%</strong>
                 </span>
                 <span className="tl-display" style={{ fontSize: 13, fontWeight: 600, color: tokens.ink }}>
                   Throughlines.app
@@ -1072,6 +1125,7 @@ export default function Dashboard() {
 
             <div className="flex items-center justify-end gap-2">
               <button 
+                type="button"
                 onClick={() => setShowShareModal(false)} 
                 className="tl-focus btn-premium"
                 style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${tokens.line}`, background: "transparent", color: tokens.ink, fontSize: 13, cursor: "pointer" }}
@@ -1079,10 +1133,12 @@ export default function Dashboard() {
                 Close
               </button>
               <button 
+                type="button"
                 onClick={() => {
                   const shareText = `Check out my throughline on "${selectedTopic.title}": ${window.location.origin}/dashboard`
                   navigator.clipboard.writeText(shareText)
-                  triggerToast("Summary & Link copied to clipboard!")
+                    .then(() => triggerToast("Summary & Link copied to clipboard!"))
+                    .catch(() => triggerToast("Failed to copy link"))
                   setShowShareModal(false)
                 }} 
                 className="tl-focus btn-premium"
@@ -1091,7 +1147,7 @@ export default function Dashboard() {
                 Copy Link & Summary
               </button>
             </div>
-          </div>
+          </dialog>
         </div>
       )}
 

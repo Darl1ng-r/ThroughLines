@@ -5,7 +5,6 @@
 
 import { subscribeEvent, EVENTS } from './eventBusService'
 import { generatePerspectiveSynthesis } from './aiSynthesisService'
-import { supabase } from './supabaseClient'
 import { invalidateCache } from './redisCacheService'
 import { sendNativeNotification } from './notificationService'
 
@@ -95,10 +94,17 @@ function scheduleTaskOnIdle(taskFn) {
   }
 }
 
+let isWorkersInitialized = false
+
 /**
- * Initialize Background Worker Subscriptions
+ * Initialize Background Worker Subscriptions (Idempotent)
  */
 export function initBackgroundWorkers() {
+  if (isWorkersInitialized) {
+    return () => {}
+  }
+  isWorkersInitialized = true
+
   const unsubs = [
     subscribeEvent(EVENTS.ENTRY_CREATED, (msg) => {
       if (trackProcessedEvent(msg?.eventId)) return
@@ -116,8 +122,9 @@ export function initBackgroundWorkers() {
 
   return () => {
     unsubs.forEach(unsub => unsub())
+    isWorkersInitialized = false
   }
 }
 
-// Auto-start background workers on import
+// Auto-start background workers on initial import
 initBackgroundWorkers()

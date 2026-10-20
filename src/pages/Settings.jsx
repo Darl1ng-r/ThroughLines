@@ -67,7 +67,7 @@ export default function Settings() {
       const { data: outbox } = await supabase
         .from('outbox_events')
         .select('*')
-        .eq('user_id', user.id)
+        .filter('payload->>userId', 'eq', user.id)
         .order('created_at', { ascending: false })
 
       downloadJSONArchive({
@@ -179,7 +179,7 @@ export default function Settings() {
         <div style={{ background: tokens.card, border: `1px solid ${tokens.line}`, borderRadius: 12, padding: 24 }}>
           <form onSubmit={handleSave} className="flex flex-col gap-4">
             <label className="flex flex-col gap-1" style={{ fontSize: 12, color: tokens.inkSoft }}>
-              Display name
+              <span>Display name</span>
               <input
                 type="text"
                 required
@@ -200,7 +200,7 @@ export default function Settings() {
             </label>
 
             <label className="flex flex-col gap-1" style={{ fontSize: 12, color: tokens.inkSoft }}>
-              Biography
+              <span>Biography</span>
               <textarea
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
@@ -221,7 +221,7 @@ export default function Settings() {
             </label>
 
             <div className="flex flex-col gap-1" style={{ fontSize: 12, color: tokens.inkSoft }}>
-              Username
+              <span>Username</span>
               <input
                 type="text"
                 disabled
